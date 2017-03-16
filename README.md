@@ -1,1 +1,1 @@
-# My project's README
+# Hipeac GPUs K-means challenge
