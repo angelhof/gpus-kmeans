@@ -12,6 +12,7 @@ gpu_naive: kmeans_gpu.cu
 
 check_architectures: check_architecture.cu
 	$(GPU_COMP) check_architecture.cu -o get_arch
+	./get_arch
 
 run:
 	./kmeans < ../data/input.in

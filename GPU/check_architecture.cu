@@ -29,6 +29,18 @@ int getSPcores(cudaDeviceProp devProp)
     return cores;
 }
 
+void show_device_info(cudaDeviceProp prop, int cnt){
+  printf("Device Number: %d\n", cnt);
+  printf("  Device name: %s\n", prop.name);
+  printf("  Memory Clock Rate (KHz): %d\n",
+         prop.memoryClockRate);
+  printf("  Memory Bus Width (bits): %d\n",
+         prop.memoryBusWidth);
+  printf("  Peak Memory Bandwidth (GB/s): %f\n\n",
+         2.0*prop.memoryClockRate*(prop.memoryBusWidth/8)/1.0e6);
+  return;
+}
+
 
 int main() {
   int nDevices;
@@ -37,15 +49,17 @@ int main() {
   for (int i = 0; i < nDevices; i++) {
     cudaDeviceProp prop;
     cudaGetDeviceProperties(&prop, i);
-    printf("Device Number: %d\n", i);
-    printf("  Device name: %s\n", prop.name);
-    printf("  Memory Clock Rate (KHz): %d\n",
-           prop.memoryClockRate);
-    printf("  Memory Bus Width (bits): %d\n",
-           prop.memoryBusWidth);
-    printf("  Peak Memory Bandwidth (GB/s): %f\n\n",
-           2.0*prop.memoryClockRate*(prop.memoryBusWidth/8)/1.0e6);
+
+    show_device_info(prop, i);
+
+    int device_cores, device_mps;
+
+    device_cores = getSPcores(prop);
+    device_mps = prop.multiProcessorCount;
+    printf(" Device Cores: %d\n", device_cores);
+    printf(" Device Multi Processors: %d\n", device_mps);
   }
+
 }
 
 
