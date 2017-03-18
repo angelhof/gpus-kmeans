@@ -8,8 +8,6 @@
 #define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
 #define MAX(X, Y) (((X) > (Y)) ? (X) : (Y))
 
-#define METHOD 2
-
 // #define DEBUG
 
 #ifdef DEBUG
@@ -23,12 +21,10 @@ do { \
 #endif
 
 
-double distance(double* ps, double* center, int dim) {
-    int i;
+double squared_distance(double* ps, double* center, int dim) {
     double sum = 0;
 
-    // Xreiazetai sqrt???
-    for (i = 0; i < dim; i++){
+    for (int i = 0; i < dim; i++){
         double temp = center[i] - ps[i];
         sum += temp * temp;
     }
@@ -36,32 +32,20 @@ double distance(double* ps, double* center, int dim) {
     return sum;
 }
 
-double** create_points(int n, int dim){
-    double **ps, *temp;
-    int i;
+double** create_2D_double_array(int n, int dim) {
+    double **arr, *temp;
     temp = (double *)calloc(n * dim, sizeof(double));
-    ps = (double **)calloc(n, sizeof(double *));    
-    for (i = 0 ; i < n; i++)
-        ps[i] = temp + i * dim;
-    if (ps == NULL || temp == NULL) {
-        fprintf(stderr, "Error in allocation!\n");
-        exit(-1);
-    }
-    return ps;
-}
+    arr = (double **)calloc(n, sizeof(double *));
 
-char** create_2D_array(int k, int n){
-    char **ps, *temp;
-    int i;
-    temp = (char *)calloc(k * n, sizeof(char));
-    ps = (char **)calloc(k, sizeof(char *));    
-    for (i = 0 ; i < k; i++)
-        ps[i] = temp + i * n;
-    if (ps == NULL || temp == NULL) {
+    for (int i = 0 ; i < n; i++)
+        arr[i] = temp + i * dim;
+
+    if (arr == NULL || temp == NULL) {
         fprintf(stderr, "Error in allocation!\n");
         exit(-1);
     }
-    return ps;
+
+    return arr;
 }
 
 void delete_points(double** ps){
@@ -75,11 +59,12 @@ double** init_centers_kpp(double **ps, int n, int k, int dim){
     int first_i;
     int max, max_i;
     double distances_from_centers[n];
-    double **centers = create_points(k,dim);
+    double **centers = create_2D_double_array(k,dim);
     double temp_distances[n];
 
     // Initialize with max double
-    for (int i = 0; i < n; i++) distances_from_centers[i] = DBL_MAX;
+    for (i = 0; i < n; i++)
+    	distances_from_centers[i] = DBL_MAX;
 
     srand(time(NULL));
 
@@ -94,9 +79,9 @@ double** init_centers_kpp(double **ps, int n, int k, int dim){
     while(curr_k < k-1) {
         max = -1;
         max_i = -1;
-        for(i=0;i<n;i++){
-            DPRINTF("New distance: %f and old min distance: %f", distance(ps[i], centers[curr_k], dim), distances_from_centers[i]);
-            temp_distances[i] = MIN(distance(ps[i], centers[curr_k], dim), distances_from_centers[i]);    
+        for(i=0; i<n; i++){
+            DPRINTF("New squared_distance: %f and old min squared_distance: %f", squared_distance(ps[i], centers[curr_k], dim), distances_from_centers[i]);
+            temp_distances[i] = MIN(squared_distance(ps[i], centers[curr_k], dim), distances_from_centers[i]);  
             if(temp_distances[i] > max){
                 max = temp_distances[i];
                 max_i = i;
@@ -114,19 +99,23 @@ double** init_centers_kpp(double **ps, int n, int k, int dim){
 
 int find_cluster(double* ps, double** centers, int n, int k, int dim) {
     int cluster = 0;
-    int j;
-    double dist;
-    double min = distance(ps, centers[0], dim);
+    double dist, min = squared_distance(ps, centers[0], dim);
 
-    for (j = 1; j < k; j++){
-        dist = distance(ps, centers[j], dim);
+    for (int i = 1; i < k; i++){
+        dist = squared_distance(ps, centers[i], dim);
         if (min > dist){
             min = dist;
-            cluster = j;
+            cluster = i;
         }
     }
 
     return cluster;
+}
+
+void find_clusters(double** points, double** centers, int n, int k, int dim, int* points_clusters) {
+	for (int i = 0; i < n; i++) {
+        points_clusters[i] = find_cluster(points[i], centers, n, k, dim);
+    }
 }
 
 double** update_centers(double** ps, int* cls, int n, int k, int dim) {
@@ -134,8 +123,8 @@ double** update_centers(double** ps, int* cls, int n, int k, int dim) {
     double **new_centers;
     int *points_in_cluster;
 
-    new_centers = create_points(k, dim);
-    points_in_cluster = (int*)calloc(k, sizeof(int));
+    new_centers = create_2D_double_array(k, dim);
+    points_in_cluster = (int*) calloc(k, sizeof(int));
     for (i = 0; i < n; i++) {
         points_in_cluster[cls[i]]++;
         for (j = 0; j < dim; j++){
@@ -155,15 +144,17 @@ double** update_centers(double** ps, int* cls, int n, int k, int dim) {
 }
 
 int main() {
-    // read input
+    
     int n, k, i, j;
     int dim = 2;
     double **points;
+
+    // read input
     scanf("%d %d", &n, &k);
-    points = create_points(n, dim);
-    for (i = 0; i < n; i++) {
-        scanf("%lf %lf", &points[i][0], &points[i][1]);
-    }
+    points = create_2D_double_array(n, dim);
+    for (i = 0; i < n; i++)
+    	for (j = 0; j < dim; j++)
+    		scanf("%lf", &points[i][j]);
     
     double **centers;
     centers = init_centers_kpp(points, n, k, dim);
@@ -173,22 +164,23 @@ int main() {
     double eps = 1.0E-6;
     int *points_clusters;
     double **new_centers;
-    new_centers = create_points(k, dim);
+    new_centers = create_2D_double_array(k, dim);
     points_clusters = (int *)calloc(n, sizeof(int));
 
     while (check > eps) {
-        // assign points
-        for (i = 0; i < n; i++) {
-            points_clusters[i] = find_cluster(points[i], centers, n, k, dim);
-        }
 
-        // update means
-        check = 0;
+        // assign points to clusters - step 1
+        find_clusters(points, centers, n, k, dim, points_clusters);
+        
+        // update means - step 2
         new_centers = update_centers(points, points_clusters, n, k, dim);
 
+        // check for convergence
+        check = 0;
         for (j = 0; j < k; j++) {
-            check += sqrt(distance(new_centers[j], centers[j], dim));
-            for (i = 0; i < dim; i++) centers[j][i] = new_centers[j][i];
+            check += sqrt(squared_distance(new_centers[j], centers[j], dim));
+            for (i = 0; i < dim; i++)
+            	centers[j][i] = new_centers[j][i];
         }
     }
 
