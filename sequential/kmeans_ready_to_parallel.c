@@ -183,7 +183,6 @@ int main() {
         }
 
         // update means
-
         check = 0;
         new_centers = update_centers(points, points_clusters, n, k, dim);
 
@@ -191,7 +190,6 @@ int main() {
             check += sqrt(distance(new_centers[j], centers[j], dim));
             for (i = 0; i < dim; i++) centers[j][i] = new_centers[j][i];
         }
-
     }
 
     // print results

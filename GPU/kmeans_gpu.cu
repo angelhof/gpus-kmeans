@@ -4,11 +4,19 @@
 #include <stdlib.h>
 #include <time.h>
 #include <math.h>
+#include <cuda.h>
+#include "gpu_util.h"
 
 #define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
 #define MAX(X, Y) (((X) > (Y)) ? (X) : (Y))
 
-#define METHOD 2
+#ifndef EPS
+#   define EPS 1.e-6
+#endif
+
+/* gpu parameters */
+#define GRID_SIZE 16
+#define BLOCK_SIZE 256
 
 // #define DEBUG
 
@@ -27,7 +35,6 @@ double distance(double* ps, double* center, int dim) {
     int i;
     double sum = 0;
 
-    // Xreiazetai sqrt???
     for (i = 0; i < dim; i++){
         double temp = center[i] - ps[i];
         sum += temp * temp;
@@ -50,7 +57,7 @@ double** create_points(int n, int dim){
     return ps;
 }
 
-char** create_clusters(int k, int n){
+char** create_2D_array(int k, int n){
     char **ps, *temp;
     int i;
     temp = (char *)calloc(k * n, sizeof(char));
@@ -69,34 +76,8 @@ void delete_points(double** ps){
     ps = NULL;
 }
 
-
-
-// #if METHOD == 2
-// double** init_centers(double **ps, int n, int k, int dim) {
-//     int i, j;
-//     int chosen = 0;
-//     double **centers;
-//     char *used_points;
-
-//     centers = create_points(k, dim);
-//     used_points = (char *)calloc(n, sizeof(char));
-//     srand(time(NULL));
-//     for (i = 0; i < k; i++) {
-//         do {
-//             chosen = rand() % n;
-//         } while (used_points[chosen] != 0);
-//         used_points[chosen] = 1;
-//         for (j = 0; j < dim; j++)
-//             centers[i][j] = ps[chosen][j];
-//     }
-    
-//     return centers;
-// }
-// #endif
-
-
 double** init_centers_kpp(double **ps, int n, int k, int dim){
-    int i,j;
+    int i;
     int curr_k = 0;
     int first_i;
     int max, max_i;
@@ -104,12 +85,12 @@ double** init_centers_kpp(double **ps, int n, int k, int dim){
     double **centers = create_points(k,dim);
     double temp_distances[n];
 
-    // Initialize with max double
+    /* Initialize with max double */
     for (int i = 0; i < n; i++) distances_from_centers[i] = DBL_MAX;
 
     srand(time(NULL));
 
-    // Choose a first point
+    /* Choose a first point */
     first_i = rand() % n;
     DPRINTF("First random index: %d", first_i);
 
@@ -155,91 +136,82 @@ int find_cluster(double* ps, double** centers, int n, int k, int dim) {
     return cluster;
 }
 
-double* update_center(double** ps, char* cluster, int n, int dim) {
-    int i, j, points_in_cluster = 0;
-    double *new_center;
+double** update_centers(double** ps, int* cls, int n, int k, int dim) {
+    int i, j;
+    double **new_centers;
+    int *points_in_cluster;
 
-    new_center = (double *)calloc(dim + 1, sizeof(double));
-
+    new_centers = create_points(k, dim);
+    points_in_cluster = (int*)calloc(k, sizeof(int));
     for (i = 0; i < n; i++) {
-        if (cluster[i]){
-            points_in_cluster++;
-            for (j = 0; j < dim; j++) new_center[j] += ps[i][j];
+        points_in_cluster[cls[i]]++;
+        for (j = 0; j < dim; j++){
+            new_centers[cls[i]][j] += ps[i][j];
         }
     }
 
-    if (points_in_cluster > 0) {
-        for (i = 0; i < dim; i++)
-            new_center[i] /= points_in_cluster;
-        new_center[dim] = 2;
+    for (i = 0; i < k; i++) {
+        if (points_in_cluster[i]) {
+            for (j = 0; j < dim; j++){
+                new_centers[i][j] /= points_in_cluster[i];
+            }
+        }
     }
-    else new_center[dim] = -2;
-    return new_center;
+    // FIXME: check if points are zero and have no points in cluster
+    return new_centers;
 }
 
 int main() {
-    // read input
+    /* read input */
     int n, k, i, j;
-
-    // this one in args
     int dim = 2;
     double **points;
-
     scanf("%d %d", &n, &k);
     points = create_points(n, dim);
     for (i = 0; i < n; i++) {
         scanf("%lf %lf", &points[i][0], &points[i][1]);
     }
 
+    dim3 gpu_grid(GRID_SIZE, 1);
+    dim3 gpu_block(BLOCK_SIZE, 1);
+    // size_t shmem_size = block_size * sizeof(float);
+
+    printf("Grid size : %dx%d\n", gpu_grid.x, gpu_grid.y);
+    printf("Block size: %dx%d\n", gpu_block.x, gpu_block.y);
+    // printf("Shared memory size: %ld bytes\n", shmem_size);
+
+    /* GPU allocations */
+    value_t *gpu_A = (value_t *)gpu_alloc(n*n*sizeof(*gpu_A));
+    if (!gpu_A) error(0, "gpu_alloc failed: %s", gpu_get_last_errmsg());
     
-    // #if METHOD == 2
-    // // initiate centers
-    // double **centers;
-    // centers = init_centers(points, n, k, dim);
-    // #endif
-    
+    /* initialize centers */
     double **centers;
     centers = init_centers_kpp(points, n, k, dim);
 
-    // start algorithm
+    /* start algorithm */
     double check = 1;
+    int *points_clusters;
+    double **new_centers;
+    new_centers = create_points(k, dim);
+    points_clusters = (int *)calloc(n, sizeof(int));
 
-    // should probably be in args
-    double eps = 1.0E-6;
-    char **clusters;
-    int *prev_clusters;
-    int cl;
-
-    clusters = create_clusters(k, n);
-    prev_clusters = (int *)calloc(n, sizeof(int));
-
-    while (check > eps) {
-        // assign points
+    while (check > EPS) {
+        /* assign points */
         for (i = 0; i < n; i++) {
-            cl = find_cluster(points[i], centers, n, k, dim);
-            int prev = prev_clusters[i];
-            if (cl != prev) {
-                clusters[cl][i] = 1;
-                clusters[prev][i] = 0;
-                prev_clusters[i] = cl;
-            }
+            points_clusters[i] = find_cluster(points[i], centers, n, k, dim);
         }
 
-        // update means
+        /* update means */
         check = 0;
-        for (j = 0; j < k; j++) {
-            double *new_center;
-            new_center = update_center(points, clusters[j], n, dim);
-            if (new_center[dim] > 0) {
-                check += sqrt(distance(new_center, centers[j], dim));
-                // ISWS MEMCPY ???
-                for (i = 0; i < dim; i++) centers[j][i] = new_center[i];
-            }
-        }
+        new_centers = update_centers(points, points_clusters, n, k, dim);
 
+        for (j = 0; j < k; j++) {
+            check += sqrt(distance(new_centers[j], centers[j], dim));
+            for (i = 0; i < dim; i++) centers[j][i] = new_centers[j][i];
+        }
     }
 
-    // print results
+    /* print results */
     printf("Centers:\n");
     for (i = 0; i < k; i++) {
         for (j = 0; j < dim; j++)
@@ -247,7 +219,7 @@ int main() {
         printf("\n");
     }
 
-    // clear and exit
+    /* clear and exit */
     delete_points(points);
     delete_points(centers);
     return 0;
