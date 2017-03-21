@@ -186,7 +186,8 @@ int main() {
     scanf("%d %d", &n, &k);
     points = create_points(n, dim);
     for (i = 0; i < n; i++) {
-        scanf("%lf %lf", &points[i][0], &points[i][1]);
+        for (j = 0; j < dim; j++)
+            scanf("%lf", &points[i][j]);
     }
 
     
