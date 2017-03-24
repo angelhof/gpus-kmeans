@@ -15,8 +15,10 @@
 #endif
 
 /* gpu parameters */
-#define GRID_SIZE 16
-#define BLOCK_SIZE 256
+//#define GRID_SIZE 16
+//#define BLOCK_SIZE 256
+
+
 
 // #define DEBUG
 
@@ -177,7 +179,7 @@ void find_cluster_on_gpu(double *dev_points, double *dev_centers, int n, int k, 
 }
 
 void find_clusters_on_gpu(double** points, double** centers, int n, int k, int dim, int* points_clusters,
-                          double* dev_points, double* dev_centers, int* map_points_to_clusters) {
+                          double* dev_points, double* dev_centers, int* map_points_to_clusters, int BLOCK_SIZE) {
     int grid_size = (n+BLOCK_SIZE-1)/BLOCK_SIZE;
     dim3 gpu_grid(grid_size, 1);
     dim3 gpu_block(BLOCK_SIZE, 1);
@@ -230,11 +232,14 @@ double** update_centers(double** ps, int* cls, int n, int k, int dim) {
     return new_centers;
 }
 
-int main() {
+int main(int argc, char *argv[]) {
     
     int n, k, i, j;
     int dim = 2;
     double **points;
+    
+    int BLOCK_SIZE = 256; //Default
+    if (argc > 1) BLOCK_SIZE = atoi(argv[1]);
 
     // read input
     scanf("%d %d", &n, &k);
@@ -269,10 +274,12 @@ int main() {
         return -1;
     }
 
+	clock_t start = clock();
+	
     while (check > eps) {
 
         // assign points to clusters - step 1
-        find_clusters_on_gpu(points, centers, n, k, dim, points_clusters, dev_points, dev_centers, map_points_to_clusters);
+        find_clusters_on_gpu(points, centers, n, k, dim, points_clusters, dev_points, dev_centers, map_points_to_clusters, BLOCK_SIZE);
         
         // update means - step 2
         new_centers = update_centers(points, points_clusters, n, k, dim);
@@ -284,15 +291,46 @@ int main() {
             for (i = 0; i < dim; i++)
                 centers[j][i] = new_centers[j][i];
         }
+        
+        //free new_centers 
+        delete_points(new_centers);
     }
-
-    // print results
-    printf("Centers:\n");
+    
+    double time_elapsed = (double)(clock() - start) / CLOCKS_PER_SEC;
+	printf("Total Time Elapsed: %lf seconds\n", time_elapsed);
+    
+    FILE *f;
+    //Store Performance metrics
+    //For now just the time elapsed, in the future maybe we'll need memory GPU memory bandwidth etc...
+    f = fopen("log.out", "w");
+    fprintf(f, "Time Elapsed: %lf ", time_elapsed);
+    fclose(f);
+    
+    
+    // print & save results
+    
+    f = fopen("centers.out", "w");
+	
+	printf("Centers:\n");
     for (i = 0; i < k; i++) {
-        for (j = 0; j < dim; j++)
-            printf("%lf ", centers[i][j]);
+        for (j = 0; j < dim; j++){
+			printf("%lf ", centers[i][j]);
+			fprintf(f, "%lf ", centers[i][j]);
+		}
         printf("\n");
+        fprintf(f, "\n");
     }
+    fclose(f);
+    
+    //Store Mapping Data in case we need it
+    copy_from_gpu(points_clusters, map_points_to_clusters, n*sizeof(int));
+    f = fopen("point_cluster_map.out", "w");
+    for (i =0;i<n;i++){
+		fprintf(f, "%d\n", points_clusters[i]);
+	}
+    
+    fclose(f);
+    
 
     // GPU clean
     gpu_free(dev_centers);
@@ -302,5 +340,6 @@ int main() {
     // clear and exit
     delete_points(points);
     delete_points(centers);
+    free(points_clusters);
     return 0;
 }
