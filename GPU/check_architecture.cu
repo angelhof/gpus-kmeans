@@ -32,10 +32,15 @@ int getSPcores(cudaDeviceProp devProp)
 void show_device_info(cudaDeviceProp prop, int cnt){
   printf("Device Number: %d\n", cnt);
   printf("  Device name: %s\n", prop.name);
-  printf("  Memory Clock Rate (KHz): %d\n",
-         prop.memoryClockRate);
-  printf("  Memory Bus Width (bits): %d\n",
-         prop.memoryBusWidth);
+  printf("  Max Threads per Block: %d\n", prop.maxThreadsPerBlock);
+  printf("  Max Block Dimensions: %d %d %d\n", prop.maxThreadsDim[0],
+												 prop.maxThreadsDim[1],
+												 prop.maxThreadsDim[2]);
+  printf("  Max Grid Dimensions: %d %d %d\n", prop.maxGridSize[0],
+												 prop.maxGridSize[1],
+												 prop.maxGridSize[2]);
+  printf("  Memory Clock Rate (KHz): %d\n", prop.memoryClockRate);
+  printf("  Memory Bus Width (bits): %d\n", prop.memoryBusWidth);
   printf("  Peak Memory Bandwidth (GB/s): %f\n\n",
          2.0*prop.memoryClockRate*(prop.memoryBusWidth/8)/1.0e6);
   return;

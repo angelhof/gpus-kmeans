@@ -20,7 +20,7 @@
 
 
 
-// #define DEBUG
+//#define DEBUG
 
 #ifdef DEBUG
 #define DPRINTF(fmt, args...) \
@@ -103,10 +103,11 @@ double** init_centers_kpp(double **ps, int n, int k, int dim){
     int curr_k = 0;
     int first_i;
     int max, max_i;
-    double distances_from_centers[n];
+    double *distances_from_centers, *temp_distances;
+    distances_from_centers = (double*) malloc(sizeof(double)*n);
     double **centers = create_2D_double_array(k,dim);
-    double temp_distances[n];
-
+    temp_distances = (double*) malloc(sizeof(double)*n);
+    
     // Initialize with max double
     for (i = 0; i < n; i++)
         distances_from_centers[i] = DBL_MAX;
@@ -135,7 +136,10 @@ double** init_centers_kpp(double **ps, int n, int k, int dim){
  
         memcpy(distances_from_centers, temp_distances, n * sizeof(double));
         memcpy(centers[++curr_k], ps[max_i], dim * sizeof(double));
-    }   
+    }
+    
+    free(temp_distances);
+    free(distances_from_centers);
     return centers;
 }
 
@@ -183,7 +187,7 @@ void find_clusters_on_gpu(double** points, double** centers, int n, int k, int d
     int grid_size = (n+BLOCK_SIZE-1)/BLOCK_SIZE;
     dim3 gpu_grid(grid_size, 1);
     dim3 gpu_block(BLOCK_SIZE, 1);
-
+    
     // printf("Grid size : %dx%d\n", gpu_grid.x, gpu_grid.y);
     // printf("Block size: %dx%d\n", gpu_block.x, gpu_block.y);
     // // printf("Shared memory size: %ld bytes\n", shmem_size);
@@ -194,8 +198,8 @@ void find_clusters_on_gpu(double** points, double** centers, int n, int k, int d
     }
 
     find_cluster_on_gpu<<<gpu_grid,gpu_block>>>(dev_points, dev_centers, n, k, dim, map_points_to_clusters);
-
-    cudaThreadSynchronize();
+    
+    cudaDeviceSynchronize();
 
     if (copy_from_gpu(points_clusters, map_points_to_clusters, n*sizeof(int)) != 0) {
         printf("Error in copy_to_gpu map_points_to_clusters\n");
@@ -210,16 +214,14 @@ double** update_centers(double** ps, int* cls, int n, int k, int dim) {
 
     new_centers = create_2D_double_array(k, dim);
     points_in_cluster = (int*) calloc(k, sizeof(int));
- 
-
+    
     for (i = 0; i < n; i++) {
         points_in_cluster[cls[i]]++;
         for (j = 0; j < dim; j++){
             new_centers[cls[i]][j] += ps[i][j];
         }
     }
-
-
+    
     for (i = 0; i < k; i++) {
         if (points_in_cluster[i]) {
             for (j = 0; j < dim; j++){
@@ -240,18 +242,41 @@ int main(int argc, char *argv[]) {
     
     int BLOCK_SIZE = 256; //Default
     if (argc > 1) BLOCK_SIZE = atoi(argv[1]);
-
-    // read input
-    scanf("%d %d", &n, &k);
-    points = create_2D_double_array(n, dim);
-    for (i = 0; i < n; i++) {
-        for (j = 0; j < dim; j++)
-            scanf("%lf", &points[i][j]);
+    
+    //The second input argument should be the dataset filename
+    if (argc > 2) {
+        FILE *in;
+        in = fopen(argv[2], "r");
+        //Parse file
+        fscanf(in, "%d %d \n", &n ,&k);
+        points = create_2D_double_array(n, dim);
+        for (i =0; i<n; i++) {
+            for (j=0; j<dim; j++) {
+                fscanf(in, "%lf", &points[i][j]);
+            }
+        }
+        fclose(in);
+    //Otherwise parse stdin
+    //PS: For large datasets this doesn't work at all
+    } else {
+        // read input
+        scanf("%d %d", &n, &k);
+        points = create_2D_double_array(n, dim);
+        for (i = 0; i < n; i++) {
+            for (j = 0; j < dim; j++)
+                scanf("%lf", &points[i][j]);
+        }
     }
+        
+    printf("Input Read successfully \n");
+
+    
     
     double **centers;
+    printf("Init \n");
     centers = init_centers_kpp(points, n, k, dim);
-
+    printf("Init Centers done \n");
+    
     // start algorithm
     double check = 1;
     double eps = 1.0E-6;
@@ -259,7 +284,7 @@ int main(int argc, char *argv[]) {
     double **new_centers;
 
     points_clusters = (int *)calloc(n, sizeof(int));
-
+    
     // GPU allocations
     double *dev_centers, *dev_points;
     int *map_points_to_clusters;
@@ -267,15 +292,20 @@ int main(int argc, char *argv[]) {
     dev_centers = (double *) gpu_alloc(k*dim*sizeof(double));
     dev_points = (double *) gpu_alloc(n*dim*sizeof(double));
     map_points_to_clusters = (int *) gpu_alloc(n*sizeof(int));
-
+    
+    printf("GPU allocs done \n");
+    
     // Copy points to GPU
     if (copy_to_gpu(points[0], dev_points, n*dim*sizeof(*dev_centers)) != 0) {
         printf("Error in copy_to_gpu points\n");
         return -1;
     }
 
-	clock_t start = clock();
-	
+    clock_t start = clock();
+    
+    
+    printf("Loop Start \n");
+    int step = 0;
     while (check > eps) {
 
         // assign points to clusters - step 1
@@ -283,7 +313,6 @@ int main(int argc, char *argv[]) {
         
         // update means - step 2
         new_centers = update_centers(points, points_clusters, n, k, dim);
-
         // check for convergence
         check = 0;
         for (j = 0; j < k; j++) {
@@ -292,12 +321,14 @@ int main(int argc, char *argv[]) {
                 centers[j][i] = new_centers[j][i];
         }
         
+        printf("Step %d , Convergence: %lf \n", step, check);
+        step += 1;
         //free new_centers 
         delete_points(new_centers);
     }
     
     double time_elapsed = (double)(clock() - start) / CLOCKS_PER_SEC;
-	printf("Total Time Elapsed: %lf seconds\n", time_elapsed);
+    printf("Total Time Elapsed: %lf seconds\n", time_elapsed);
     
     FILE *f;
     //Store Performance metrics
@@ -310,13 +341,13 @@ int main(int argc, char *argv[]) {
     // print & save results
     
     f = fopen("centers.out", "w");
-	
-	printf("Centers:\n");
+    
+    printf("Centers:\n");
     for (i = 0; i < k; i++) {
         for (j = 0; j < dim; j++){
-			printf("%lf ", centers[i][j]);
-			fprintf(f, "%lf ", centers[i][j]);
-		}
+            printf("%lf ", centers[i][j]);
+            fprintf(f, "%lf ", centers[i][j]);
+        }
         printf("\n");
         fprintf(f, "\n");
     }
@@ -326,8 +357,8 @@ int main(int argc, char *argv[]) {
     copy_from_gpu(points_clusters, map_points_to_clusters, n*sizeof(int));
     f = fopen("point_cluster_map.out", "w");
     for (i =0;i<n;i++){
-		fprintf(f, "%d\n", points_clusters[i]);
-	}
+        fprintf(f, "%d\n", points_clusters[i]);
+    }
     
     fclose(f);
     
