@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 
-with open("input.in") as f:
+with open("data/dataset_elki_500.in") as f:
     data = f.read()
 
 with open("centers.out") as f:
@@ -12,12 +12,11 @@ centers = map(lambda x: map(float, x.split()), centers_lines)
 
 data = data.split('\n')[1:-2]
 
-x = [row.split(' ')[0] for row in data]
-y = [row.split(' ')[1] for row in data]
+x = [float(row.split(' ')[0]) for row in data]
+y = [float(row.split(' ')[1]) for row in data]
 
 x_c = [row[0] for row in centers]
 y_c = [row[1] for row in centers]
-
 
 fig = plt.figure()
 ax = plt.subplot()
