@@ -33,6 +33,27 @@ do { \
 #endif
 
 
+#if __CUDA_ARCH__ < 600
+__device__ double doubleAtomicAdd(double* address, double val)
+{
+    unsigned long long int* address_as_ull =
+                              (unsigned long long int*)address;
+    unsigned long long int old = *address_as_ull, assumed;
+
+    do {
+        assumed = old;
+        old = atomicCAS(address_as_ull, assumed,
+                        __double_as_longlong(val +
+                               __longlong_as_double(assumed)));
+
+    // Note: uses integer comparison to avoid hang in case of NaN (since NaN != NaN)
+    } while (assumed != old);
+
+    return __longlong_as_double(old);
+}
+#endif
+
+
 __device__ int get_global_tid()
 {
     return (gridDim.x*blockIdx.y + blockIdx.x)*blockDim.x*blockDim.y +
@@ -159,7 +180,8 @@ int find_cluster_on_cpu(double* ps, double** centers, int n, int k, int dim) {
 }
 
 __global__
-void find_cluster_on_gpu(double *dev_points, double *dev_centers, int n, int k, int dim, int *result_clusters) {
+void find_cluster_on_gpu(double *dev_points, double *dev_centers, int n, int k, int dim, 
+                         int *result_clusters) {
 
     double min, dist;
     int index = get_global_tid();
@@ -182,8 +204,7 @@ void find_cluster_on_gpu(double *dev_points, double *dev_centers, int n, int k, 
     }
 }
 
-void find_clusters_on_gpu(double** points, double** centers, int n, int k, int dim, int* points_clusters,
-                          double* dev_points, double* dev_centers, int* map_points_to_clusters, int BLOCK_SIZE) {
+void find_clusters_on_gpu(int n, int k, int dim, double* dev_points, double* dev_centers, int* dev_points_clusters, int BLOCK_SIZE) {
     int grid_size = (n+BLOCK_SIZE-1)/BLOCK_SIZE;
     dim3 gpu_grid(grid_size, 1);
     dim3 gpu_block(BLOCK_SIZE, 1);
@@ -192,40 +213,127 @@ void find_clusters_on_gpu(double** points, double** centers, int n, int k, int d
     // printf("Block size: %dx%d\n", gpu_block.x, gpu_block.y);
     // // printf("Shared memory size: %ld bytes\n", shmem_size);
 
-    if (copy_to_gpu(centers[0], dev_centers, k*dim*sizeof(*dev_centers)) != 0) {
-        printf("Error in copy_to_gpu centers\n");
-        return;
-    }
-
-    find_cluster_on_gpu<<<gpu_grid,gpu_block>>>(dev_points, dev_centers, n, k, dim, map_points_to_clusters);
+    // centers already copied in GPU
+    find_cluster_on_gpu<<<gpu_grid,gpu_block>>>(dev_points, dev_centers, n, k, dim, dev_points_clusters);
     
     cudaDeviceSynchronize();
 
-    if (copy_from_gpu(points_clusters, map_points_to_clusters, n*sizeof(int)) != 0) {
-        printf("Error in copy_to_gpu map_points_to_clusters\n");
-        return;
+    // next function will read from dev_points_clusters
+}
+
+__global__
+void count_points_in_clusters_on_gpu(double* dev_points,       // Device point data 
+                                     int* dev_points_clusters, // Device point -> cluster
+                                     int n, int k, int dim,  
+                                     double* dev_centers,      // Device center data    
+                                     int* dev_points_in_cluster) {
+    int i, j;
+    
+    int index = get_global_tid();
+
+    int start = index;
+    int end = start + 1;
+
+    // Clear dev_centers in order to save the new_centers there
+    if (index < k){
+        dev_points_in_cluster[index] = 0;
+        for(j=0; j<dim; j++){
+            dev_centers[index*dim + j] = 0;
+        }
     }
+    __syncthreads();
+
+
+    
+    if (index < n){
+        for (i = start; i < end; i++) {
+            atomicAdd(&dev_points_in_cluster[dev_points_clusters[i]], 1);
+            for (j = 0; j < dim; j++) {
+                doubleAtomicAdd(&(dev_centers[dev_points_clusters[i]*dim + j]), dev_points[i*dim + j]);
+            }
+        }
+    }
+
+    
+}
+
+__global__
+void update_center_on_gpu(int n, int k, int dim, 
+                          double* dev_centers, 
+                          int* dev_points_in_cluster){
+    int i, j;
+
+    int index = get_global_tid();
+
+    int start = index;
+    int end = start + 1;
+
+    if (index < k){
+        for (i = start; i < end; i++) {
+            if (dev_points_in_cluster[i]) {
+                for (j = 0; j < dim; j++){
+                    dev_centers[i*dim + j] /= dev_points_in_cluster[i];
+                }
+            }
+        }
+    }
+}
+
+void update_centers_on_gpu(int n, int k, int dim,
+                           double* dev_points,        // Device point data 
+                           double* dev_centers,       // Device old center data
+                           int* dev_points_clusters,  // Device points -> clusters
+                           int BLOCK_SIZE,              
+                           int* dev_points_in_cluster) {  // How many points in each cluster
+    int grid_size = (n+BLOCK_SIZE-1)/BLOCK_SIZE;
+    dim3 gpu_grid(grid_size, 1);
+    dim3 gpu_block(BLOCK_SIZE, 1);
+    
+    // printf("Grid size : %dx%d\n", gpu_grid.x, gpu_grid.y);
+    // printf("Block size: %dx%d\n", gpu_block.x, gpu_block.y);
+    // // printf("Shared memory size: %ld bytes\n", shmem_size);
+    
+
+    // dev_points_clusters are in GPU from previous function
+
+
+    // Count points that belong to each cluster
+    count_points_in_clusters_on_gpu<<<gpu_grid,gpu_block>>>(
+        dev_points, 
+        dev_points_clusters, 
+        n, k, dim, 
+        dev_centers, 
+        dev_points_in_cluster);
+
+    cudaDeviceSynchronize();
+
+    // Update centers based on counted points
+    update_center_on_gpu<<<gpu_grid,gpu_block>>>(n, k, dim, dev_centers, dev_points_in_cluster);
+
+    cudaDeviceSynchronize();
+
+    // new_centers are copied to CPU in while
 }
 
 double** update_centers(double** ps, int* cls, int n, int k, int dim) {
     int i, j;
     double **new_centers;
-    int *points_in_cluster;
+    int *dev_points_in_cluster;
 
     new_centers = create_2D_double_array(k, dim);
-    points_in_cluster = (int*) calloc(k, sizeof(int));
+    dev_points_in_cluster = (int*) calloc(k, sizeof(int));
     
     for (i = 0; i < n; i++) {
-        points_in_cluster[cls[i]]++;
+        dev_points_in_cluster[cls[i]]++;
         for (j = 0; j < dim; j++){
             new_centers[cls[i]][j] += ps[i][j];
         }
     }
     
     for (i = 0; i < k; i++) {
-        if (points_in_cluster[i]) {
+        if (dev_points_in_cluster[i]) {
             for (j = 0; j < dim; j++){
-                new_centers[i][j] /= points_in_cluster[i];
+                new_centers[i][j] /= dev_points_in_cluster[i];
             }
         }
     }
@@ -271,6 +379,7 @@ int main(int argc, char *argv[]) {
     printf("Input Read successfully \n");
 
     
+    clock_t start = clock();
     
     double **centers;
     printf("Init \n");
@@ -283,48 +392,76 @@ int main(int argc, char *argv[]) {
     int *points_clusters;
     double **new_centers;
 
+    new_centers = create_2D_double_array(k, dim);
     points_clusters = (int *)calloc(n, sizeof(int));
     
     // GPU allocations
     double *dev_centers, *dev_points;
-    int *map_points_to_clusters;
+    int *dev_points_clusters;
+    int *dev_points_in_cluster;
 
     dev_centers = (double *) gpu_alloc(k*dim*sizeof(double));
     dev_points = (double *) gpu_alloc(n*dim*sizeof(double));
-    map_points_to_clusters = (int *) gpu_alloc(n*sizeof(int));
+    dev_points_in_cluster = (int *) gpu_alloc(k*sizeof(int));
+    dev_points_clusters = (int *) gpu_alloc(n*sizeof(int));
     
     printf("GPU allocs done \n");
     
     // Copy points to GPU
-    if (copy_to_gpu(points[0], dev_points, n*dim*sizeof(*dev_centers)) != 0) {
+    if (copy_to_gpu(points[0], dev_points, n*dim*sizeof(double)) != 0) {
         printf("Error in copy_to_gpu points\n");
         return -1;
     }
 
-    clock_t start = clock();
-    
+    // Copy centers to GPU
+    if (copy_to_gpu(centers[0], dev_centers, k*dim*sizeof(double)) != 0) {
+        printf("Error in copy_to_gpu centers\n");
+        return -1;
+    }
     
     printf("Loop Start \n");
     int step = 0;
     while (check > eps) {
 
         // assign points to clusters - step 1
-        find_clusters_on_gpu(points, centers, n, k, dim, points_clusters, dev_points, dev_centers, map_points_to_clusters, BLOCK_SIZE);
+        find_clusters_on_gpu(n, k, dim, dev_points, dev_centers, dev_points_clusters, BLOCK_SIZE);
         
         // update means - step 2
-        new_centers = update_centers(points, points_clusters, n, k, dim);
+        update_centers_on_gpu(n, k, dim,
+            dev_points,
+            dev_centers,
+            dev_points_clusters,
+            BLOCK_SIZE,
+            dev_points_in_cluster);
+
+
         // check for convergence
+        for (i = 0; i < k; i++){
+            for (j = 0; j < dim; j++){
+                printf("%lf ", new_centers[i][j]);
+            }
+            printf("\n");
+        }
+
+        // TODO: centers check in GPU, so we don't copy from gpu each time
+        if (copy_from_gpu(new_centers[0], dev_centers, k*dim*sizeof(double)) != 0) {
+            printf("Error in copy_from_gpu dev_centers\n");
+            return -1;
+        }
+
         check = 0;
         for (j = 0; j < k; j++) {
             check += sqrt(squared_distance(new_centers[j], centers[j], dim));
-            for (i = 0; i < dim; i++)
+            for (i = 0; i < dim; i++){
                 centers[j][i] = new_centers[j][i];
+            }
         }
         
         printf("Step %d , Convergence: %lf \n", step, check);
         step += 1;
-        //free new_centers 
-        delete_points(new_centers);
+        //free new_centers
+        // if (step == 5) break;
+        // delete_points(new_centers);
     }
     
     double time_elapsed = (double)(clock() - start) / CLOCKS_PER_SEC;
@@ -354,7 +491,7 @@ int main(int argc, char *argv[]) {
     fclose(f);
     
     //Store Mapping Data in case we need it
-    copy_from_gpu(points_clusters, map_points_to_clusters, n*sizeof(int));
+    copy_from_gpu(points_clusters, dev_points_clusters, n*sizeof(int));
     f = fopen("point_cluster_map.out", "w");
     for (i =0;i<n;i++){
         fprintf(f, "%d\n", points_clusters[i]);
@@ -366,7 +503,7 @@ int main(int argc, char *argv[]) {
     // GPU clean
     gpu_free(dev_centers);
     gpu_free(dev_points);
-    gpu_free(map_points_to_clusters);
+    gpu_free(dev_points_clusters);
 
     // clear and exit
     delete_points(points);
