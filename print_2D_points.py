@@ -4,7 +4,7 @@ with open("input.in") as f:
     data = f.read()
 
 with open("centers.out") as f:
-	centers_data = f.read()
+    centers_data = f.read()
 
 centers_lines = centers_data[:-1].split('\n')
 
