@@ -1,12 +1,22 @@
-from sklearn.cluster import KMeans
+import sys
 import numpy as np
+from sklearn.cluster import KMeans
+from sklearn.cluster import MiniBatchKMeans
 
-with open("input.in") as f:
-    data = f.readlines()
+with open(sys.argv[1]) as f:
+    n, k = map(int, f.readline().split())
+    X = np.loadtxt(f)
 
-data_lines = data[1:-1]
-X = map(lambda x: map(float, x.split()), data_lines)
-# X = np.array([[1, 2], [1, 4], [1, 0],[4, 2], [4, 4], [4, 0]])
-kmeans = KMeans(n_clusters=3, random_state=0).fit(X)
+kmeans = KMeans(n_clusters=k, random_state=0, n_jobs=-1).fit(X)
+print "Simple K-Means clustering with K-Means++ initialization:"
+print "-Labels:"
 print kmeans.labels_
+print "-Centers:"
 print kmeans.cluster_centers_
+
+minibatch = MiniBatchKMeans(n_clusters=k, random_state=0).fit(X)
+print "\nMini-Batch K-Means clustering with K-Means++ initialization:"
+print "-Labels:"
+print minibatch.labels_
+print "-Centers:"
+print minibatch.cluster_centers_

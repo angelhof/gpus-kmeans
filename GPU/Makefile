@@ -1,6 +1,7 @@
 CXX=g++
 CFLAGS=-O3 -lm -Wall
-GPU_COMP=nvcc
+CUDA_PREFIX = /usr/local/cuda
+GPU_COMP ?= $(CUDA_PREFIX)/bin/nvcc
 GPU_BACKEND=g++
 GPU_FLAGS=-ccbin
 GPU_ARCH=-arch sm_20
