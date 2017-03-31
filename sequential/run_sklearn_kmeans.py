@@ -4,7 +4,7 @@ from sklearn.cluster import KMeans
 from sklearn.cluster import MiniBatchKMeans
 
 with open(sys.argv[1]) as f:
-    n, k = map(int, f.readline().split())
+    n, k, dim= map(int, f.readline().split())
     X = np.loadtxt(f)
 
 kmeans = KMeans(n_clusters=k, random_state=0, n_jobs=-1).fit(X)

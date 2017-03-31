@@ -180,7 +180,7 @@ double* update_center(double** ps, char* cluster, int n, int dim) {
 int main() {
     // read input
     int n, k, i, j;
-    int dim = 2;
+    int dim = 3;
     double **points;
 
     scanf("%d %d", &n, &k);

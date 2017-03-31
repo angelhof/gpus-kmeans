@@ -4,6 +4,7 @@
 iris_file = ['iris', '_original', '.data']
 
 k_clusters = 3
+dims = 4
 
 file_name = iris_file
 # Open file and read all lines  
@@ -21,7 +22,7 @@ n = len(data_lines)
 f_out = open(file_name[0] + file_name[2], 'w') 
 
 # Write constants
-f_out.write(str(n) + " " + str(k_clusters) + "\n")
+f_out.write(str(n) + " " + str(k_clusters) + " " +  str(dims)  + "\n")
 
 for line in data_lines:
   f_out.write(" ".join(line) + "\n")

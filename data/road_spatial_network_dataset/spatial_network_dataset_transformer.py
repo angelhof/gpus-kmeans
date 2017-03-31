@@ -4,7 +4,8 @@
 dataset_file = ['spatial_network', '_original', '.data']
 
 # This dataset doesn't have a correct cluster number so try with different ones
-k_clusters = 5
+k_clusters = 4
+dims = 3
 
 file_name = dataset_file
 # Open file and read all lines  
@@ -22,7 +23,7 @@ n = len(data_lines)
 f_out = open(file_name[0] + file_name[2], 'w') 
 
 # Write constants
-f_out.write(str(n) + " " + str(k_clusters) + "\n")
+f_out.write(str(n) + " " + str(k_clusters) + " " +  str(dims)  + "\n")
 
 for line in data_lines:
   f_out.write(" ".join(line) + "\n")
