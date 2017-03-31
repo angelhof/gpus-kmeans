@@ -17,7 +17,7 @@
 /* gpu parameters */
 //#define GRID_SIZE 16
 //#define BLOCK_SIZE 256
-
+#define DIMENSION 2
 
 
 // #define DEBUG
@@ -216,10 +216,63 @@ void count_points_in_clusters_on_gpu(double* dev_points,       // Device point d
             }
         }
     }
+}
 
+
+__global__
+void count_points_with_reduce(
+            double* dev_points,       // Device point data 
+            int* dev_points_clusters, // Device point -> cluster
+            int n, int k, int dim,  
+            double* dev_centers,      // Device center data    
+            int* dev_points_in_cluster){
+    
+    // WARNING: Check shared memory size
+    // extern __shared__ double centers_acc[];
+    // extern __shared__ int points_in_clusters_acc[];
+
+    int i,j;
+    double local_center_acc[DIMENSION];
+    // Maybe unnecessary
+    for(i=0;i<DIMENSION;i++){
+        local_center_acc[i] = 0;
+    }
+    int local_points_in_cluster = 0;
+
+    // Blocks 0, k, 2*k will sum for cluster 0
+    int cluster_id = blockIdx.x % k;
+    // Number of blocks will be b * k and every b blocks will sweep the whole array 
+    int block_id = blockIdx.x / k;
+    int grid_dim = gridDim.x / k;
+    int thread_id = threadIdx.x;
+    int block_size = blockDim.x;
+    int points_per_block = n / grid_dim;
+
+    int start = block_id * points_per_block + thread_id;
+    int end = (block_id + 1)* points_per_block;
 
     
+    // Local accumulating stage
+    for(i=start; i<end; i+=block_size){
+        
+        // If this point belongs to this block's cluster
+        if(dev_points_clusters[i] == cluster_id){
+            // Add one to the points in cluster counter
+            local_points_in_cluster++;
+
+            // And add the points coords to the accumulator
+            for(j=0;j<DIMENSION;j++){
+                local_center_acc[j] += dev_points[i*dim + j];
+            }
+
+        }
+    }
+    printf("Points in cluster: %d = %d\n", cluster_id, local_points_in_cluster);
+
+
+
 }
+
 
 __global__
 void update_center_on_gpu(int n, int k, int dim, 
@@ -344,13 +397,21 @@ void kmeans_on_gpu(
     cudaDeviceSynchronize();
 
     // Count points that belong to each cluster
-    count_points_in_clusters_on_gpu<<<gpu_grid,gpu_block>>>(
+    // count_points_in_clusters_on_gpu<<<gpu_grid,gpu_block>>>(
+    //     dev_points, 
+    //     dev_points_clusters, 
+    //     n, k, dim, 
+    //     dev_new_centers, 
+    //     dev_points_in_cluster);
+    
+    count_points_with_reduce<<<k,1>>>(
         dev_points, 
         dev_points_clusters, 
         n, k, dim, 
         dev_new_centers, 
         dev_points_in_cluster);
     cudaDeviceSynchronize();
+
 
     // Update centers based on counted points
     update_center_on_gpu<<<gpu_grid,gpu_block>>>(
