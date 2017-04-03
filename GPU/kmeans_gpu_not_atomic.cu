@@ -6,6 +6,9 @@
 #include <math.h>
 #include <cuda.h>
 #include "gpu_util.h"
+//CUBLAS
+#include "cublas.h"
+#include "cublas_v2.h" 
 
 #define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
 #define MAX(X, Y) (((X) > (Y)) ? (X) : (Y))
@@ -316,8 +319,9 @@ void check_convergence(double* dev_centers,
                        int* dev_check,
                        double eps){
     int index = get_global_tid();
+    
     if (index < k) {
-        *dev_check = 1;
+        //*dev_check = 1; //Moved outside the function
         double diff = squared_distance_on_gpu(&dev_new_centers[index*dim], 
                                               &dev_centers[index*dim], 
                                               dim);
@@ -325,14 +329,12 @@ void check_convergence(double* dev_centers,
         if (diff > eps) {            
             *dev_check = 0;          
         }
-
         // printf("Center[%d]: (%lf, %lf, %lf)\n", index, dev_centers[index*dim + 0], dev_centers[index*dim + 1], dev_centers[index*dim + 2]);
 
         for (int i = 0; i < dim; i++){
             // printf("Before Updated dev_centers[%d] = %lf\n", index*dim + i, dev_centers[index*dim + i]);
             dev_centers[index*dim + i] = dev_new_centers[index*dim + i];
             // printf("Updated dev_centers[%d] = %lf\n", index*dim + i, dev_centers[index*dim + i]);
-            
         }
     }
 }
@@ -361,7 +363,10 @@ void kmeans_on_gpu(
             int* dev_points_in_cluster,
             double* dev_new_centers,
             int* dev_check,
-            int BLOCK_SIZE) {
+            int BLOCK_SIZE, 
+            //CUBLAS Shit
+            cublasHandle_t handle,
+            cublasStatus_t stat) {
 
     
     double eps = 1.0E-4;
@@ -396,20 +401,21 @@ void kmeans_on_gpu(
     zero_out_arrays<<<gpu_grid,gpu_block>>>(dev_new_centers, dev_points_in_cluster, k, dim);
     cudaDeviceSynchronize();
 
-    // Count points that belong to each cluster
-    // count_points_in_clusters_on_gpu<<<gpu_grid,gpu_block>>>(
-    //     dev_points, 
-    //     dev_points_clusters, 
-    //     n, k, dim, 
-    //     dev_new_centers, 
-    //     dev_points_in_cluster);
-    
-    count_points_with_reduce<<<k,1>>>(
+     //Count points that belong to each cluster
+    count_points_in_clusters_on_gpu<<<gpu_grid,gpu_block>>>(
         dev_points, 
         dev_points_clusters, 
         n, k, dim, 
         dev_new_centers, 
         dev_points_in_cluster);
+    
+    //count_points_with_reduce<<<k,1>>>(
+        //dev_points, 
+        //dev_points_clusters, 
+        //n, k, dim, 
+        //dev_new_centers, 
+        //dev_points_in_cluster);
+        
     cudaDeviceSynchronize();
 
 
@@ -418,17 +424,38 @@ void kmeans_on_gpu(
         n, k, dim,
         dev_new_centers,
         dev_points_in_cluster);
+    
     cudaDeviceSynchronize();
 
-    // check for convergence
+    /*    
+    cudaMemset(dev_check, 1, 1); //Set the first byte (LE)
     check_convergence<<<gpu_grid,gpu_block>>>(
         dev_centers,
         dev_new_centers,
         n, k, dim,
         dev_check,
         eps);
+    */
+
+    
+    //Check for convergence with CUBLAS
+    //dev_new_centers and dev_centers arrays are actually checked for equality
+    //No distances are calculated separately for each center point.
+    //It seems like its working smoothly so far
+    int icheck = 0; //This is used to make it compatible with how the code works now
+    double check = 0.0;
+    //First subtract the dev_center arrays
+    double alpha = -1.0;
+    cublasDaxpy(handle, k*dim, &alpha, dev_new_centers, 1, dev_centers, 1 );
+    //Now find the norm2 of the new_centers
+    cublasDnrm2(handle, k*dim, dev_centers, 1, &check);
+    if (!(check > EPS)) icheck = 1;
+	copy_to_gpu(&icheck, dev_check, sizeof(int));
+    
+    //Update new centers
+    cudaMemcpy(dev_centers, dev_new_centers, sizeof(double)*k*dim, cudaMemcpyDeviceToDevice);
+    
     cudaDeviceSynchronize();
-        
 }
 
 int main(int argc, char *argv[]) {
@@ -458,8 +485,14 @@ int main(int argc, char *argv[]) {
     fclose(in);
         
     printf("Input Read successfully \n");
-
-    // Calculate grid and block sizes
+	
+	//Create CUBLAS Handles
+	cublasStatus_t stat;
+	cublasHandle_t handle;
+	
+	stat = cublasCreate(&handle); if (stat != CUBLAS_STATUS_SUCCESS) { printf ("CUBLAS initialization failed\n"); return -1;}
+	
+	// Calculate grid and block sizes
     int grid_size = (n+BLOCK_SIZE-1)/BLOCK_SIZE;
     dim3 gpu_grid(grid_size, 1);
     dim3 gpu_block(BLOCK_SIZE, 1);
@@ -514,31 +547,32 @@ int main(int argc, char *argv[]) {
 
     // Debug
     for(i=0;i<k;i++){
-        for(j=0;j<dim;j++){
+        for(j=0;j<dim;j++)
             printf("%lf,\t", centers[i][j]);
-        }
         printf("\n");
     }
 
     while (!check) {
         kmeans_on_gpu(
-                dev_points,
-                dev_centers,
-                n, k, dim,
-                dev_points_clusters,
-                dev_points_in_cluster,
-                dev_new_centers,
-                dev_check,
-                BLOCK_SIZE);
+					dev_points,
+					dev_centers,
+					n, k, dim,
+					dev_points_clusters,
+					dev_points_in_cluster,
+					dev_new_centers,
+					dev_check,
+					BLOCK_SIZE,
+					handle,
+					stat);
         
-
-        copy_from_gpu(&check, dev_check, sizeof(int));
-
-        printf("Step %d\n", step);
+		copy_from_gpu(&check, dev_check, sizeof(int));
+        
+        printf("Step %d Check: %d \n", step, check);
+        //if (check < EPS) break;
         
         step += 1;
         //free new_centers
-        if (step == 1000) break;
+        if (step == 100) break;
         // delete_points(new_centers);
     }
 
@@ -580,6 +614,7 @@ int main(int argc, char *argv[]) {
     
     // GPU clean
     gpu_free(dev_centers);
+    gpu_free(dev_new_centers);
     gpu_free(dev_points);
     gpu_free(dev_points_clusters);
 
