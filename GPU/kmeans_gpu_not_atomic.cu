@@ -1,39 +1,15 @@
-#include <float.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include <math.h>
-#include <cuda.h>
 #include "gpu_util.h"
-//CUBLAS
-#include "cublas.h"
-#include "cublas_v2.h" 
-
-#define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
-#define MAX(X, Y) (((X) > (Y)) ? (X) : (Y))
-
-#ifndef EPS
-#   define EPS 1.e-6
-#endif
+#include "kmeans_util.h"
+#include "cublas_v2.h"
 
 /* gpu parameters */
 //#define GRID_SIZE 16
 //#define BLOCK_SIZE 256
 #define DIMENSION 2
-
-
-// #define DEBUG
-
-#ifdef DEBUG
-#define DPRINTF(fmt, args...) \
-do { \
-    printf("%s, line %u: " fmt "\r\n", __FUNCTION__, __LINE__ , ##args); \
-    fflush(stdout); \
-} while (0)
-#else   
-#define DPRINTF(fmt, args...)   do{}while(0)
-#endif
 
 
 #if __CUDA_ARCH__ < 600
@@ -55,408 +31,6 @@ __device__ double doubleAtomicAdd(double* address, double val)
     return __longlong_as_double(old);
 }
 #endif
-
-
-__device__ int get_global_tid()
-{
-    return (gridDim.x*blockIdx.y + blockIdx.x)*blockDim.x*blockDim.y +
-        blockDim.x*threadIdx.y + threadIdx.x;
-}
-
-double squared_distance(double* ps, double* center, int dim) {
-    double sum = 0;
-
-    for (int i = 0; i < dim; i++){
-        double temp = center[i] - ps[i];
-        sum += temp * temp;
-    }
-
-    return sum;
-}
-
-__device__
-double squared_distance_on_gpu(double* ps, double* center, int dim) {
-    double sum = 0;
-
-    for (int i = 0; i < dim; i++){
-        double temp = center[i] - ps[i];
-        sum += temp * temp;
-    }
-
-    return sum;
-}
-
-double** create_2D_double_array_on_gpu(int n, int dim) {
-    double **arr;
-    arr = (double **)gpu_alloc(n * sizeof(double*));
-
-    for (int i = 0 ; i < n; i++)
-        arr[i] = (double *)gpu_alloc( dim * sizeof(double));
-
-    if (arr == NULL ) {
-        fprintf(stderr, "Error in allocation!\n");
-        exit(-1);
-    }
-
-    return arr;
-}
-
-double** create_2D_double_array(int n, int dim) {
-    double **arr, *temp;
-    temp = (double *)calloc(n * dim, sizeof(double));
-    arr = (double **)calloc(n, sizeof(double *));
-
-    for (int i = 0 ; i < n; i++)
-        arr[i] = temp + i * dim;
-
-    if (arr == NULL || temp == NULL) {
-        fprintf(stderr, "Error in allocation!\n");
-        exit(-1);
-    }
-
-    return arr;
-}
-
-void delete_points(double** ps){
-    free(ps);
-    ps = NULL;
-}
-
-double** init_centers_kpp(double **ps, int n, int k, int dim){
-    int i;
-    int curr_k = 0;
-    int first_i;
-    int max, max_i;
-    double *distances_from_centers, *temp_distances;
-    distances_from_centers = (double*) malloc(sizeof(double)*n);
-    double **centers = create_2D_double_array(k,dim);
-    temp_distances = (double*) malloc(sizeof(double)*n);
-    
-    // Initialize with max double
-    for (i = 0; i < n; i++)
-        distances_from_centers[i] = DBL_MAX;
-
-    srand(time(NULL));
-
-    // Choose a first point
-    first_i = rand() % n;
-    DPRINTF("First random index: %d", first_i);
-
-    memcpy(centers[curr_k], ps[first_i], dim * sizeof(double));
-    DPRINTF("Point 1: (%f, %f)", ps[first_i][0], ps[first_i][1]);
-    DPRINTF("Center 1: (%f, %f)", centers[curr_k][0], centers[curr_k][1]);
-
-    while(curr_k < k-1) {
-        max = -1;
-        max_i = -1;
-        for(i=0; i<n; i++){
-            DPRINTF("New squared_distance: %f and old min squared_distance: %f", squared_distance(ps[i], centers[curr_k], dim), distances_from_centers[i]);
-            temp_distances[i] = MIN(squared_distance(ps[i], centers[curr_k], dim), distances_from_centers[i]);  
-            if(temp_distances[i] > max){
-                max = temp_distances[i];
-                max_i = i;
-            }
-        }
- 
-        memcpy(distances_from_centers, temp_distances, n * sizeof(double));
-        memcpy(centers[++curr_k], ps[max_i], dim * sizeof(double));
-    }
-    
-    free(temp_distances);
-    free(distances_from_centers);
-    return centers;
-}
-
-__global__
-void find_cluster_on_gpu(double *dev_points, double *dev_centers, int n, int k, int dim, 
-                         int *result_clusters) {
-
-    double min, dist;
-    int cluster_it_belongs;
-    int index = get_global_tid();
-
-    int start = index;
-    int end = start + 1;
-
-    if (index < n){
-        for (int i = start; i < end; i++){
-            min = DBL_MAX;
-            for (int j = 0; j < k; j++){
-                dist = squared_distance_on_gpu(&dev_points[i*dim], &dev_centers[j*dim], dim);
-
-                if (min > dist){
-                    min = dist;
-                    cluster_it_belongs = j;
-                }
-            }
-            result_clusters[i] = cluster_it_belongs;
-        }
-    }
-}
-
-__global__
-void count_points_in_clusters_on_gpu(double* dev_points,       // Device point data 
-                                     int* dev_points_clusters, // Device point -> cluster
-                                     int n, int k, int dim,  
-                                     double* dev_centers,      // Device center data    
-                                     int* dev_points_in_cluster) {
-    int i, j;
-    
-    int index = get_global_tid();
-
-    int start = index;
-    int end = start + 1;
-    
-
-    
-
-    if (index < n){
-
-        for (i = start; i < end; i++) {
-            atomicAdd(&dev_points_in_cluster[dev_points_clusters[i]], 1);
-            for (j = 0; j < dim; j++) {
-                doubleAtomicAdd(&(dev_centers[dev_points_clusters[i]*dim + j]), dev_points[i*dim + j]);
-            }
-        }
-    }
-}
-
-
-__global__
-void count_points_with_reduce(
-            double* dev_points,       // Device point data 
-            int* dev_points_clusters, // Device point -> cluster
-            int n, int k, int dim,  
-            double* dev_centers,      // Device center data    
-            int* dev_points_in_cluster){
-    
-    // WARNING: Check shared memory size
-    // extern __shared__ double centers_acc[];
-    // extern __shared__ int points_in_clusters_acc[];
-
-    int i,j;
-    double local_center_acc[DIMENSION];
-    // Maybe unnecessary
-    for(i=0;i<DIMENSION;i++){
-        local_center_acc[i] = 0;
-    }
-    int local_points_in_cluster = 0;
-
-    // Blocks 0, k, 2*k will sum for cluster 0
-    int cluster_id = blockIdx.x % k;
-    // Number of blocks will be b * k and every b blocks will sweep the whole array 
-    int block_id = blockIdx.x / k;
-    int grid_dim = gridDim.x / k;
-    int thread_id = threadIdx.x;
-    int block_size = blockDim.x;
-    int points_per_block = n / grid_dim;
-
-    int start = block_id * points_per_block + thread_id;
-    int end = (block_id + 1)* points_per_block;
-
-    
-    // Local accumulating stage
-    for(i=start; i<end; i+=block_size){
-        
-        // If this point belongs to this block's cluster
-        if(dev_points_clusters[i] == cluster_id){
-            // Add one to the points in cluster counter
-            local_points_in_cluster++;
-
-            // And add the points coords to the accumulator
-            for(j=0;j<DIMENSION;j++){
-                local_center_acc[j] += dev_points[i*dim + j];
-            }
-
-        }
-    }
-    printf("Points in cluster: %d = %d\n", cluster_id, local_points_in_cluster);
-
-
-
-}
-
-
-__global__
-void update_center_on_gpu(int n, int k, int dim, 
-                          double* dev_centers, 
-                          int* dev_points_in_cluster){
-    int i, j;
-
-    int index = get_global_tid();
-
-    int start = index;
-    int end = start + 1;
-
-    if (index < k){
-        for (i = start; i < end; i++) {
-            if (dev_points_in_cluster[i]) {
-                for (j = 0; j < dim; j++){
-                    dev_centers[i*dim + j] /= dev_points_in_cluster[i];
-
-                }
-                // printf("Points in cluster: %d, %d\n", index, dev_points_in_cluster[i]);
-            }
-        }
-    }
-}
-
-__device__
-void is_converged(double* dev_new_centers, 
-                  double* dev_centers, 
-                  int* check, 
-                  double eps, int index, int dim){
-    double diff = sqrt(squared_distance_on_gpu(&dev_new_centers[index], &dev_centers[index], dim));
-    if (diff > eps) {
-        *check = 0;
-    }
-}
-
-__global__
-void check_convergence(double* dev_centers,
-                       double* dev_new_centers,
-                       int n, int k, int dim,
-                       int* dev_check,
-                       double eps){
-    int index = get_global_tid();
-    
-    if (index < k) {
-        //*dev_check = 1; //Moved outside the function
-        double diff = squared_distance_on_gpu(&dev_new_centers[index*dim], 
-                                              &dev_centers[index*dim], 
-                                              dim);
-        // printf("Diff[%d]: %lf\n", index, diff);            
-        if (diff > eps) {            
-            *dev_check = 0;          
-        }
-        // printf("Center[%d]: (%lf, %lf, %lf)\n", index, dev_centers[index*dim + 0], dev_centers[index*dim + 1], dev_centers[index*dim + 2]);
-
-        for (int i = 0; i < dim; i++){
-            // printf("Before Updated dev_centers[%d] = %lf\n", index*dim + i, dev_centers[index*dim + i]);
-            dev_centers[index*dim + i] = dev_new_centers[index*dim + i];
-            // printf("Updated dev_centers[%d] = %lf\n", index*dim + i, dev_centers[index*dim + i]);
-        }
-    }
-}
-
-__global__
-void zero_out_arrays(
-            double* dev_centers,
-            int* dev_points_in_cluster,
-            int k, int dim){
-    int index = get_global_tid();
-
-    if(index < k*dim){
-        dev_centers[index] = 0.0;
-    }
-    if(index < k){
-        dev_points_in_cluster[index] = 0;
-    }
-
-}
-
-void kmeans_on_gpu(
-            double* dev_points,
-            double* dev_centers,
-            int n, int k, int dim,
-            int* dev_points_clusters,
-            int* dev_points_in_cluster,
-            double* dev_new_centers,
-            int* dev_check,
-            int BLOCK_SIZE, 
-            //CUBLAS Shit
-            cublasHandle_t handle,
-            cublasStatus_t stat) {
-
-    
-    double eps = 1.0E-4;
-
-
-    // Calculate grid and block sizes
-    int grid_size = (n+BLOCK_SIZE-1)/BLOCK_SIZE;
-    dim3 gpu_grid(grid_size, 1);
-    dim3 gpu_block(BLOCK_SIZE, 1);
-    
-    // printf("Grid size : %dx%d\n", gpu_grid.x, gpu_grid.y);
-    // printf("Block size: %dx%d\n", gpu_block.x, gpu_block.y);
-    // printf("Shared memory size: %ld bytes\n", shmem_size);
-
-    // Debug
-    // printf("%d ", index);
-
-    // assign points to clusters - step 1
-    find_cluster_on_gpu<<<gpu_grid,gpu_block>>>(
-        dev_points,
-        dev_centers,
-        n, k, dim,
-        dev_points_clusters);
-    cudaDeviceSynchronize();
-    // printf("index: %d\n", index);
-    // if(index < n) printf("dev_points_clusters[%d] = %d\n", index, dev_points_clusters[index]);
-    // update means - step 2
-
-    // Clear dev_centers in order to save the new_centers there
-    // cudaMemset(dev_points_in_cluster, 0, k*sizeof(int));
-    // cudaMemset(dev_centers, 0, k*dim*sizeof(double));
-    zero_out_arrays<<<gpu_grid,gpu_block>>>(dev_new_centers, dev_points_in_cluster, k, dim);
-    cudaDeviceSynchronize();
-
-     //Count points that belong to each cluster
-    count_points_in_clusters_on_gpu<<<gpu_grid,gpu_block>>>(
-        dev_points, 
-        dev_points_clusters, 
-        n, k, dim, 
-        dev_new_centers, 
-        dev_points_in_cluster);
-    
-    //count_points_with_reduce<<<k,1>>>(
-        //dev_points, 
-        //dev_points_clusters, 
-        //n, k, dim, 
-        //dev_new_centers, 
-        //dev_points_in_cluster);
-        
-    cudaDeviceSynchronize();
-
-
-    // Update centers based on counted points
-    update_center_on_gpu<<<gpu_grid,gpu_block>>>(
-        n, k, dim,
-        dev_new_centers,
-        dev_points_in_cluster);
-    
-    cudaDeviceSynchronize();
-
-    /*    
-    cudaMemset(dev_check, 1, 1); //Set the first byte (LE)
-    check_convergence<<<gpu_grid,gpu_block>>>(
-        dev_centers,
-        dev_new_centers,
-        n, k, dim,
-        dev_check,
-        eps);
-    */
-
-    
-    //Check for convergence with CUBLAS
-    //dev_new_centers and dev_centers arrays are actually checked for equality
-    //No distances are calculated separately for each center point.
-    //It seems like its working smoothly so far
-    int icheck = 0; //This is used to make it compatible with how the code works now
-    double check = 0.0;
-    //First subtract the dev_center arrays
-    double alpha = -1.0;
-    cublasDaxpy(handle, k*dim, &alpha, dev_new_centers, 1, dev_centers, 1 );
-    //Now find the norm2 of the new_centers
-    cublasDnrm2(handle, k*dim, dev_centers, 1, &check);
-    if (!(check > EPS)) icheck = 1;
-	copy_to_gpu(&icheck, dev_check, sizeof(int));
-    
-    //Update new centers
-    cudaMemcpy(dev_centers, dev_new_centers, sizeof(double)*k*dim, cudaMemcpyDeviceToDevice);
-    
-    cudaDeviceSynchronize();
-}
 
 int main(int argc, char *argv[]) {
     
@@ -485,14 +59,18 @@ int main(int argc, char *argv[]) {
     fclose(in);
         
     printf("Input Read successfully \n");
-	
-	//Create CUBLAS Handles
-	cublasStatus_t stat;
-	cublasHandle_t handle;
-	
-	stat = cublasCreate(&handle); if (stat != CUBLAS_STATUS_SUCCESS) { printf ("CUBLAS initialization failed\n"); return -1;}
-	
-	// Calculate grid and block sizes
+    
+    //Create CUBLAS Handles
+    cublasStatus_t stat;
+    cublasHandle_t handle;
+    
+    stat = cublasCreate(&handle);
+    if (stat != CUBLAS_STATUS_SUCCESS) {
+        printf ("CUBLAS initialization failed\n");
+        return EXIT_FAILURE;
+    }
+    
+    // Calculate grid and block sizes
     int grid_size = (n+BLOCK_SIZE-1)/BLOCK_SIZE;
     dim3 gpu_grid(grid_size, 1);
     dim3 gpu_block(BLOCK_SIZE, 1);
@@ -515,17 +93,21 @@ int main(int argc, char *argv[]) {
     // GPU allocations
     double *dev_centers, *dev_points;
     double *dev_new_centers;
-    int *dev_points_clusters;
-    int *dev_points_in_cluster;
+    double *dev_points_clusters;
+    double *dev_points_in_cluster;
+    double* dev_ones;
 
     dev_centers = (double *) gpu_alloc(k*dim*sizeof(double));
     dev_points = (double *) gpu_alloc(n*dim*sizeof(double));
-    dev_points_in_cluster = (int *) gpu_alloc(k*sizeof(int));
-    dev_points_clusters = (int *) gpu_alloc(n*sizeof(int));
-    dev_new_centers = (double *)gpu_alloc(k*dim*sizeof(double));
+    dev_points_in_cluster = (double *) gpu_alloc(k*sizeof(double));
+    dev_points_clusters = (double *) gpu_alloc(n*k*sizeof(double));
+    dev_new_centers = (double *) gpu_alloc(k*dim*sizeof(double));
+    dev_ones = (double *) gpu_alloc(n*sizeof(double));
     
     printf("GPU allocs done \n");
     
+    call_create_dev_ones(dev_ones, n, gpu_grid, gpu_block);
+
     // Copy points to GPU
     if (copy_to_gpu(points[0], dev_points, n*dim*sizeof(double)) != 0) {
         printf("Error in copy_to_gpu points\n");
@@ -554,25 +136,26 @@ int main(int argc, char *argv[]) {
 
     while (!check) {
         kmeans_on_gpu(
-					dev_points,
-					dev_centers,
-					n, k, dim,
-					dev_points_clusters,
-					dev_points_in_cluster,
-					dev_new_centers,
-					dev_check,
-					BLOCK_SIZE,
-					handle,
-					stat);
+                    dev_points,
+                    dev_centers,
+                    n, k, dim,
+                    dev_points_clusters,
+                    dev_points_in_cluster,
+                    dev_new_centers,
+                    dev_check,
+                    BLOCK_SIZE,
+                    handle,
+                    stat,
+                    dev_ones);
         
-		copy_from_gpu(&check, dev_check, sizeof(int));
+        copy_from_gpu(&check, dev_check, sizeof(int));
         
         printf("Step %d Check: %d \n", step, check);
         //if (check < EPS) break;
         
         step += 1;
         //free new_centers
-        if (step == 100) break;
+        if (step == 3) break;
         // delete_points(new_centers);
     }
 
@@ -617,6 +200,12 @@ int main(int argc, char *argv[]) {
     gpu_free(dev_new_centers);
     gpu_free(dev_points);
     gpu_free(dev_points_clusters);
+
+    stat = cublasDestroy(handle);
+    if (stat != CUBLAS_STATUS_SUCCESS) {
+        printf ("CUBLAS initialization failed\n");
+        return EXIT_FAILURE;
+    }
 
     // clear and exit
     delete_points(points);
