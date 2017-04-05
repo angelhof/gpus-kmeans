@@ -192,6 +192,7 @@ void find_cluster_on_gpu(double *dev_points, double *dev_centers, int n, int k, 
     }
 }
 
+// this function is not used
 __global__
 void count_points_in_clusters_on_gpu(double* dev_points,       // Device point data 
                                      int* dev_points_clusters, // Device point -> cluster
@@ -218,112 +219,109 @@ void count_points_in_clusters_on_gpu(double* dev_points,       // Device point d
 
 __device__
 void vectorAddInt(int *dest, int *add, int size) {
-	for (int i = 0; i < size; i++) {
-	    dest[i] += add[i];
-	}
+    for (int i = 0; i < size; i++) {
+        dest[i] += add[i];
+    }
 }
 
 __device__
 void vectorAddDouble(double *dest, double *add, int size) {
-	for (int i = 0; i < size; i++) {
-	    dest[i] += add[i];
-	    // printf("%lf\n", dest[i]);
-	}
+    for (int i = 0; i < size; i++) {
+        dest[i] += add[i];
+    }
 }
 
 __global__
 void count_points_in_clusters_reduce(double *dev_points,
-									  int *dev_points_clusters,
-									  int n, int k, int dim,
-									  double *dev_new_centers,
-									  int *dev_points_in_cluster) {
+                                      int *dev_points_clusters,
+                                      int n, int k, int dim,
+                                      double *dev_new_centers,
+                                      int *dev_points_in_cluster) {
 
     extern __shared__ int arr[];
 
-    int tid = threadIdx.x;
-    int bid = blockIdx.x;
-    int bDim = blockDim.x;
-    int gid = bid*bDim + tid;
+    int tid = threadIdx.x; // thread id -> [0, block_size)
+    int bid = blockIdx.x; // block id -> [0, grid_size)
+    int bDim = blockDim.x; // block size
+    int gid = bid*bDim + tid; // global id
     int i, j;
 
     int* s_points_in_cluster = arr; // bDim*k*sizeof(int)
     double* s_new_centers = (double*) (arr + bDim*k); // bDim*k*dim*sizeof(double)
 
-    // initialize
+    // initialize shared memory in each block
+    // each thread corresponds to one point
     for (i = 0; i < k; i++) {
-    	
-    	if (gid < n && i==dev_points_clusters[gid]) {
-    		// printf("1here %d %d\n", gid, i);
-    		s_points_in_cluster[tid*k + i] = 1;
-    		// printf("1s_points_in_cluster[%d]=%d\n", tid*k + i, s_points_in_cluster[tid*k + i]);
-    		for (j = 0; j < dim; j++) {
-    			s_new_centers[(tid*k + i)*dim + j] = dev_points[gid*dim + j];
-    			// printf("1s_new_centers[%d]=%lf\n", (tid*k + i)*dim + j, s_new_centers[(tid*k + i)*dim + j]);
-    		}
-    	} else {
-    		// printf("2here %d %d\n", gid, i);
-    		s_points_in_cluster[tid*k + i] = 0;
-    		// printf("2s_points_in_cluster[%d]=%d\n", tid*k + i, s_points_in_cluster[tid*k + i]);
-    		for (j = 0; j < dim; j++) {
-    			s_new_centers[(tid*k + i)*dim + j] = 0;
-    			// printf("2s_new_centers[%d]=%lf\n", (tid*k + i)*dim + j, s_new_centers[(tid*k + i)*dim + j]);
-    		}
-    	}
-    	//__syncthreads();
+        if (gid < n && i==dev_points_clusters[gid]) {
+            s_points_in_cluster[tid*k + i] = 1;
+            for (j = 0; j < dim; j++) {
+                s_new_centers[(tid*k + i)*dim + j] = dev_points[gid*dim + j];
+            }
+        } else {
+            s_points_in_cluster[tid*k + i] = 0;
+            for (j = 0; j < dim; j++) {
+                s_new_centers[(tid*k + i)*dim + j] = 0;
+            }
+        }
     }
     __syncthreads();
-    // printf("here\n");
-   
+
+
+    // the following part is unrolled to improve speed
+    // all these if are the reduce process
     if (tid < 128) {
-    	vectorAddInt(s_points_in_cluster+(tid*k), s_points_in_cluster+((tid+128)*k), k);
-    	for (i = 0; i < k; i++) {
-    		vectorAddDouble(s_new_centers+((tid*k + i)*dim), s_new_centers+(((tid+128)*k + i)*dim), dim);
-    	}
+        vectorAddInt(s_points_in_cluster+(tid*k), s_points_in_cluster+((tid+128)*k), k);
+        for (i = 0; i < k; i++) {
+            vectorAddDouble(s_new_centers+((tid*k + i)*dim), s_new_centers+(((tid+128)*k + i)*dim), dim);
+        }
     }
     __syncthreads();
 
     if (tid < 64) {
-    	vectorAddInt(s_points_in_cluster+(tid*k), s_points_in_cluster+((tid+64)*k), k);
-    	for (i = 0; i < k; i++) {
-    		vectorAddDouble(s_new_centers+((tid*k + i)*dim), s_new_centers+(((tid+64)*k + i)*dim), dim);
-    	}
+        vectorAddInt(s_points_in_cluster+(tid*k), s_points_in_cluster+((tid+64)*k), k);
+        for (i = 0; i < k; i++) {
+            vectorAddDouble(s_new_centers+((tid*k + i)*dim), s_new_centers+(((tid+64)*k + i)*dim), dim);
+        }
     }
     __syncthreads();
 
+    // threads in a warp(=32 threads) are already sychnorized
     if (tid < 32) {
-    	vectorAddInt(s_points_in_cluster+(tid*k), s_points_in_cluster+((tid+32)*k), k);
-    	for (i = 0; i < k; i++) {
-    		vectorAddDouble(s_new_centers+((tid*k + i)*dim), s_new_centers+(((tid+32)*k + i)*dim), dim);
-    	}
-    	vectorAddInt(s_points_in_cluster+(tid*k), s_points_in_cluster+((tid+16)*k), k);
-    	for (i = 0; i < k; i++) {
-    		vectorAddDouble(s_new_centers+((tid*k + i)*dim), s_new_centers+(((tid+16)*k + i)*dim), dim);
-    	}
-    	vectorAddInt(s_points_in_cluster+(tid*k), s_points_in_cluster+((tid+8)*k), k);
-    	for (i = 0; i < k; i++) {
-    		vectorAddDouble(s_new_centers+((tid*k + i)*dim), s_new_centers+(((tid+8)*k + i)*dim), dim);
-    	}
-    	vectorAddInt(s_points_in_cluster+(tid*k), s_points_in_cluster+((tid+4)*k), k);
-    	for (i = 0; i < k; i++) {
-    		vectorAddDouble(s_new_centers+((tid*k + i)*dim), s_new_centers+(((tid+4)*k + i)*dim), dim);
-    	}
-    	vectorAddInt(s_points_in_cluster+(tid*k), s_points_in_cluster+((tid+2)*k), k);
-    	for (i = 0; i < k; i++) {
-    		vectorAddDouble(s_new_centers+((tid*k + i)*dim), s_new_centers+(((tid+2)*k + i)*dim), dim);
-    	}
-    	vectorAddInt(s_points_in_cluster+(tid*k), s_points_in_cluster+((tid+1)*k), k);
-    	for (i = 0; i < k; i++) {
-    		vectorAddDouble(s_new_centers+((tid*k + i)*dim), s_new_centers+(((tid+1)*k + i)*dim), dim);
-    	}
+        vectorAddInt(s_points_in_cluster+(tid*k), s_points_in_cluster+((tid+32)*k), k);
+        for (i = 0; i < k; i++) {
+            vectorAddDouble(s_new_centers+((tid*k + i)*dim), s_new_centers+(((tid+32)*k + i)*dim), dim);
+        }
+        vectorAddInt(s_points_in_cluster+(tid*k), s_points_in_cluster+((tid+16)*k), k);
+        for (i = 0; i < k; i++) {
+            vectorAddDouble(s_new_centers+((tid*k + i)*dim), s_new_centers+(((tid+16)*k + i)*dim), dim);
+        }
+        vectorAddInt(s_points_in_cluster+(tid*k), s_points_in_cluster+((tid+8)*k), k);
+        for (i = 0; i < k; i++) {
+            vectorAddDouble(s_new_centers+((tid*k + i)*dim), s_new_centers+(((tid+8)*k + i)*dim), dim);
+        }
+        vectorAddInt(s_points_in_cluster+(tid*k), s_points_in_cluster+((tid+4)*k), k);
+        for (i = 0; i < k; i++) {
+            vectorAddDouble(s_new_centers+((tid*k + i)*dim), s_new_centers+(((tid+4)*k + i)*dim), dim);
+        }
+        vectorAddInt(s_points_in_cluster+(tid*k), s_points_in_cluster+((tid+2)*k), k);
+        for (i = 0; i < k; i++) {
+            vectorAddDouble(s_new_centers+((tid*k + i)*dim), s_new_centers+(((tid+2)*k + i)*dim), dim);
+        }
+        vectorAddInt(s_points_in_cluster+(tid*k), s_points_in_cluster+((tid+1)*k), k);
+        for (i = 0; i < k; i++) {
+            vectorAddDouble(s_new_centers+((tid*k + i)*dim), s_new_centers+(((tid+1)*k + i)*dim), dim);
+        }
     }
 
+    // each block will have accumulated its result at the start of its shared memory
+    // use atomics to add block results
     if (tid == 0) {
-    	for (i = 0; i < k; i++) {
-    		atomicAdd(&dev_points_in_cluster[i], s_points_in_cluster[i]);
-    		for (j = 0; j < dim; j++) {
-    			doubleAtomicAdd(&(dev_new_centers[i*dim + j]), s_new_centers[i*dim + j]);
-    		}
-	    }
+        for (i = 0; i < k; i++) {
+            atomicAdd(&dev_points_in_cluster[i], s_points_in_cluster[i]);
+            for (j = 0; j < dim; j++) {
+                doubleAtomicAdd(&(dev_new_centers[i*dim + j]), s_new_centers[i*dim + j]);
+            }
+        }
     }
 }
 
@@ -449,18 +447,11 @@ void kmeans_on_gpu(
     zero_out_arrays<<<gpu_grid, gpu_block>>>(dev_new_centers, dev_points_in_cluster, k, dim);
     cudaDeviceSynchronize();
 
-    // Count points that belong to each cluster
-    // count_points_in_clusters_on_gpu<<<gpu_grid,gpu_block>>>(
-    //     dev_points, 
-    //     dev_points_clusters, 
-    //     n, k, dim, 
-    //     dev_new_centers, 
-    //     dev_points_in_cluster);
-
     // bDim*k*sizeof(int)
     // bDim*k*dim*sizeof(double)
     // printf("%ld\n", BLOCK_SIZE*k*sizeof(int) + BLOCK_SIZE*k*dim*sizeof(double));
-    
+
+    // this function is new and implemented with partial reduce
     count_points_in_clusters_reduce<<<gpu_grid, gpu_block, BLOCK_SIZE*k*sizeof(int) + BLOCK_SIZE*k*dim*sizeof(double)>>>(
         dev_points, 
         dev_points_clusters, 
