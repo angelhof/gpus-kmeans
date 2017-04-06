@@ -20,4 +20,5 @@ void kmeans_on_gpu(
             //CUBLAS Shit
             cublasHandle_t handle,
             cublasStatus_t stat,
-            double* dev_ones);
+            double* dev_ones,
+            double* dev_temp_centers);

@@ -142,9 +142,9 @@ void find_cluster_on_gpu(double *dev_points, double *dev_centers, int n, int k, 
             }
             // Only 1 in the cluster it belongs and everything else 0
             result_clusters[cluster_it_belongs*n + i] = 1.0;
-            for (int j = 0; j < k; j++){
-                printf("result_clusters[%d][%d] = %lf --> line[%d]\n", j, i, result_clusters[j*n + i], i+2);
-            }
+            // for (int j = 0; j < k; j++){
+            //     printf("result_clusters[%d][%d] = %lf --> line[%d]\n", j, i, result_clusters[j*n + i], i+2);
+            // }
         }
     }
 }
@@ -152,7 +152,8 @@ void find_cluster_on_gpu(double *dev_points, double *dev_centers, int n, int k, 
 __global__
 void update_center_on_gpu(int n, int k, int dim, 
                           double* dev_centers, 
-                          double* dev_points_in_cluster){
+                          double* dev_points_in_cluster,
+                          double* dev_temp_centers){
     int i, j;
     int index = get_global_tid();
 
@@ -162,56 +163,19 @@ void update_center_on_gpu(int n, int k, int dim,
     if (index < k){
         for (i = start; i < end; i++) {
             // printf("dev_points_in_cluster[%d] = %d\n", i, (int)dev_points_in_cluster[i]);
-            for (j = 0; j < dim; j++){
-                printf("dev_centers[%d][%d] = %lf\n", i, j, dev_centers[i*dim + j]);
-            }
+            // for (j = 0; j < dim; j++){
+            //     printf("dev_centers[%d][%d] = %lf\n", i, j, dev_centers[j*k + i]);
+            // }
             if (dev_points_in_cluster[i] > 0) {
                 for (j = 0; j < dim; j++){
-                    dev_centers[i*dim + j] /= (int) dev_points_in_cluster[i];
+                    // FIXME: Two arrays here because of the transposed reslults of CUBLAS
+                    dev_temp_centers[i*dim + j] = dev_centers[j*k + i] / (int)dev_points_in_cluster[i];
                 }
                 // printf("Points in cluster: %d, %d\n", index, dev_points_in_cluster[i]);
             }
-            for (j = 0; j < dim; j++){
-                printf("new_dev_centers[%d][%d] = %lf\n", i, j, dev_centers[i*dim + j]);
-            }
-        }
-    }
-}
-
-__device__
-void is_converged(double* dev_new_centers, 
-                  double* dev_centers, 
-                  int* check, 
-                  double eps, int index, int dim){
-    double diff = sqrt(squared_distance_on_gpu(&dev_new_centers[index], &dev_centers[index], dim));
-    if (diff > eps) {
-        *check = 0;
-    }
-}
-
-__global__
-void check_convergence(double* dev_centers,
-                       double* dev_new_centers,
-                       int n, int k, int dim,
-                       int* dev_check,
-                       double eps){
-    int index = get_global_tid();
-    
-    if (index < k) {
-        //*dev_check = 1; //Moved outside the function
-        double diff = squared_distance_on_gpu(&dev_new_centers[index*dim], 
-                                              &dev_centers[index*dim], 
-                                              dim);
-        // printf("Diff[%d]: %lf\n", index, diff);            
-        if (diff > eps) {            
-            *dev_check = 0;          
-        }
-        // printf("Center[%d]: (%lf, %lf, %lf)\n", index, dev_centers[index*dim + 0], dev_centers[index*dim + 1], dev_centers[index*dim + 2]);
-
-        for (int i = 0; i < dim; i++){
-            // printf("Before Updated dev_centers[%d] = %lf\n", index*dim + i, dev_centers[index*dim + i]);
-            dev_centers[index*dim + i] = dev_new_centers[index*dim + i];
-            // printf("Updated dev_centers[%d] = %lf\n", index*dim + i, dev_centers[index*dim + i]);
+            // for (j = 0; j < dim; j++){
+            //     printf("new_dev_centers[%d][%d] = %lf\n", i, j, dev_centers[j*k + i]);
+            // }
         }
     }
 }
@@ -244,7 +208,8 @@ void kmeans_on_gpu(
             //CUBLAS Shit
             cublasHandle_t handle,
             cublasStatus_t stat,
-            double* dev_ones) {
+            double* dev_ones,
+            double* dev_temp_centers) {
 
     double alpha = 1.0, beta = 0.0;
 
@@ -266,19 +231,19 @@ void kmeans_on_gpu(
     cudaDeviceSynchronize();
     
     // update means - step 2
-    cublasDgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,
+    cublasDgemm(handle, CUBLAS_OP_T, CUBLAS_OP_T,
                 k, dim, n,
                 &alpha,
-                dev_points_clusters, k,
-                dev_points, n,
+                dev_points_clusters, n,
+                dev_points, dim,
                 &beta,
                 dev_new_centers, k);
     cudaDeviceSynchronize();
 
-    cublasDgemv(handle, CUBLAS_OP_N,
-                k, n,
+    cublasDgemv(handle, CUBLAS_OP_T,
+                n, k,
                 &alpha,
-                dev_points_clusters, k,
+                dev_points_clusters, n,
                 dev_ones, 1,
                 &beta,
                 dev_points_in_cluster, 1);
@@ -288,19 +253,9 @@ void kmeans_on_gpu(
     update_center_on_gpu<<<gpu_grid,gpu_block>>>(
         n, k, dim,
         dev_new_centers,
-        dev_points_in_cluster);
+        dev_points_in_cluster,
+        dev_temp_centers);
     cudaDeviceSynchronize();
-
-    /*    
-    cudaMemset(dev_check, 1, 1); //Set the first byte (LE)
-    check_convergence<<<gpu_grid,gpu_block>>>(
-        dev_centers,
-        dev_new_centers,
-        n, k, dim,
-        dev_check,
-        eps);
-    */
-
     
     //Check for convergence with CUBLAS
     //dev_new_centers and dev_centers arrays are actually checked for equality
@@ -310,7 +265,7 @@ void kmeans_on_gpu(
     double check = 0.0;
     //First subtract the dev_center arrays
     alpha = -1.0;
-    cublasDaxpy(handle, k*dim, &alpha, dev_new_centers, 1, dev_centers, 1);
+    cublasDaxpy(handle, k*dim, &alpha, dev_temp_centers, 1, dev_centers, 1);
     cudaDeviceSynchronize();
     //Now find the norm2 of the new_centers
     // cublasSetPointerMode(handle,CUBLAS_POINTER_MODE_HOST);
@@ -320,5 +275,5 @@ void kmeans_on_gpu(
     copy_to_gpu(&icheck, dev_check, sizeof(int));
     
     //Update new centers
-    cudaMemcpy(dev_centers, dev_new_centers, sizeof(double)*k*dim, cudaMemcpyDeviceToDevice);
+    cudaMemcpy(dev_centers, dev_temp_centers, sizeof(double)*k*dim, cudaMemcpyDeviceToDevice);
 }

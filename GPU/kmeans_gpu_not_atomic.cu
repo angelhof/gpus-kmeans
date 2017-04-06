@@ -95,7 +95,7 @@ int main(int argc, char *argv[]) {
     double *dev_new_centers;
     double *dev_points_clusters;
     double *dev_points_in_cluster;
-    double* dev_ones;
+    double *dev_ones;
 
     dev_centers = (double *) gpu_alloc(k*dim*sizeof(double));
     dev_points = (double *) gpu_alloc(n*dim*sizeof(double));
@@ -119,6 +119,12 @@ int main(int argc, char *argv[]) {
         printf("Error in copy_to_gpu centers\n");
         return -1;
     }
+
+    // FIXME: For now we pass TWO matrices for centers, one normal and 
+    //        one transposed. The transposed can be omitted by doing some
+    //        changes in Step 1 of K-Means.
+    double *dev_temp_centers;
+    dev_temp_centers = (double *) gpu_alloc(k*dim*sizeof(double));
 
     printf("Loop Start \n");
     
@@ -146,7 +152,8 @@ int main(int argc, char *argv[]) {
                     BLOCK_SIZE,
                     handle,
                     stat,
-                    dev_ones);
+                    dev_ones,
+                    dev_temp_centers);
         
         copy_from_gpu(&check, dev_check, sizeof(int));
         
@@ -155,7 +162,7 @@ int main(int argc, char *argv[]) {
         
         step += 1;
         //free new_centers
-        if (step == 3) break;
+        // if (step == 3) break;
         // delete_points(new_centers);
     }
 
