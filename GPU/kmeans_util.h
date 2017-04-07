@@ -8,6 +8,8 @@ void delete_points(double** ps);
 
 void call_create_dev_ones(double* dev_ones, int n, dim3 gpu_grid, dim3 gpu_block);
 
+void transpose(double** src, double* dst, int n, int m);
+
 void kmeans_on_gpu(
             double* dev_points,
             double* dev_centers,

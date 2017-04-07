@@ -108,14 +108,21 @@ int main(int argc, char *argv[]) {
     
     call_create_dev_ones(dev_ones, n, gpu_grid, gpu_block);
 
+    // Transpose points and centers for cublas
+    // TODO: Transpose at cublas in gpu
+    double * staging_points = (double*) calloc(n*dim, sizeof(double));
+    double * staging_centers = (double*) calloc(k*dim, sizeof(double));
+    transpose(points, staging_points, n, dim);
+    transpose(centers, staging_centers, k, dim);
+
     // Copy points to GPU
-    if (copy_to_gpu(points[0], dev_points, n*dim*sizeof(double)) != 0) {
+    if (copy_to_gpu(staging_points, dev_points, n*dim*sizeof(double)) != 0) {
         printf("Error in copy_to_gpu points\n");
         return -1;
     }
 
     // Copy centers to GPU
-    if (copy_to_gpu(centers[0], dev_centers, k*dim*sizeof(double)) != 0) {
+    if (copy_to_gpu(staging_centers, dev_centers, k*dim*sizeof(double)) != 0) {
         printf("Error in copy_to_gpu centers\n");
         return -1;
     }
@@ -176,17 +183,17 @@ int main(int argc, char *argv[]) {
     fprintf(f, "Time Elapsed: %lf ", time_elapsed);
     fclose(f);
     
-    
+        
     // print & save results
     
     f = fopen("centers.out", "w");
     
-    copy_from_gpu(centers[0], dev_centers, k*dim*sizeof(double));
+    copy_from_gpu(staging_centers, dev_centers, k*dim*sizeof(double));
     printf("Centers:\n");
     for (i = 0; i < k; i++) {
         for (j = 0; j < dim; j++){
-            printf("%lf ", centers[i][j]);
-            fprintf(f, "%lf ", centers[i][j]);
+            printf("%lf ", staging_centers[j*k + i]);
+            fprintf(f, "%lf ", staging_centers[j*k + i]);
         }
         printf("\n");
         fprintf(f, "\n");

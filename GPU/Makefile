@@ -4,7 +4,7 @@ CUDA_FLAGS=-O3 -D_FORCE_INLINES
 CUDA_PREFIX=/opt/cuda-7.5
 GPU_COMP?=nvcc
 GPU_BACKEND=g++
-GPU_FLAGS=-ccbin
+GPU_FLAGS=--ptxas-options=-v
 GPU_ARCH=-arch sm_20
 CUBLAS=-lcublas
 CUBLAS_PATH=-L$(CUDA_PREFIX)/lib64
@@ -12,10 +12,10 @@ CUBLAS_PATH=-L$(CUDA_PREFIX)/lib64
 all: kmeans_gpu run
 
 kmeans_util.o: kmeans_util.cu
-	$(GPU_COMP) $(CUDA_FLAGS) -c kmeans_util.cu
+	$(GPU_COMP) $(CUDA_FLAGS) -c kmeans_util.cu $(GPU_FLAGS)
 
 gpu_util.o: gpu_util.cu
-	$(GPU_COMP) $(CUDA_FLAGS) -c gpu_util.cu
+	$(GPU_COMP) $(CUDA_FLAGS) -c gpu_util.cu $(GPU_FLAGS)
 
 kmeans_gpu: gpu_util.o kmeans_util.o kmeans_gpu_not_atomic.cu
 	$(GPU_COMP) $(CUDA_FLAGS) -c kmeans_gpu_not_atomic.cu -o kmeans_gpu.o
