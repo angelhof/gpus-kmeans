@@ -22,6 +22,6 @@ Please take over as many tasks as you can
 - (Kallas) Automate evaluation 
 
 ## Algorithm
-- Simulated Annealing
+- (Greg) Simulated Annealing
 - Boruvka
 - Yin Yang Kmeans
