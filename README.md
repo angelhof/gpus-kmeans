@@ -14,6 +14,9 @@ Please take over as many tasks as you can
 - (Sklikas) Reduce used registers number
 - (Sklikas) Change where centers are saved in memory (Textures, constant)
 
+## Report
+- (Tsatiris) First Draft
+
 ## Evaluation
 - (Kallas) Find dataset with many dimension 
 - (Kallas) Automate evaluation 
