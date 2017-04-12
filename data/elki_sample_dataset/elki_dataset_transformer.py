@@ -5,6 +5,7 @@ elki_files = [ ['dataset_elki_150', '_original', '.in']
              , ['dataset_elki_500', '_original', '.in']]
 
 k_clusters = 3
+attrs = 2
 
 for file_name in elki_files:
 
@@ -26,7 +27,7 @@ for file_name in elki_files:
   f_out = open(file_name[0] + file_name[2], 'w') 
 
   # Write constants
-  f_out.write(str(n) + " " + str(k_clusters) + "\n")
+  f_out.write(str(n) + " " + str(k_clusters) + " " + str(attrs) + "\n")
   
   for line in data_lines:
     f_out.write(" ".join(line) + "\n")
