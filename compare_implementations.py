@@ -16,6 +16,7 @@ datasets = [ "iris_dataset/iris.data"
            , "road_spatial_network_dataset/spatial_network.data"
            , "nu_minebench_dataset/kmeans/color.data"
            , "nu_minebench_dataset/kmeans/edge.data"
+           , "daily_sports_activities/data.data"
            ]
 
 datasets = map(lambda x: data_dir + x, datasets)
@@ -33,6 +34,7 @@ for (impl, name) in implementations:
 ## Run all implementations
 for (impl, name) in implementations:
     for ds in datasets:
+        print " -- Executing: " + name + " - " + ds
         ps = ["time", "-p", impl, ds]
         proc = subprocess.Popen(ps, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         (out, err) = proc.communicate()
