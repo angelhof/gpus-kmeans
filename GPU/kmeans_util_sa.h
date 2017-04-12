@@ -8,7 +8,6 @@
 
 #ifndef EPS
       #define EPS 1.e-6
-      #define EPS_SA 1.e-1
 #endif
 
 

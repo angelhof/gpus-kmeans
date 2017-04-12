@@ -64,19 +64,6 @@ double squared_distance_on_gpu(const double* ps, const double* center, const int
     return sum;
 }
 
-__device__
-double normalized_squared_distance_on_gpu(const double* ps, const double* center, const int n, const int k, const int dim) {
-    double sum = 0;
-    for (int i = 0, j=0; i < dim*n; i+=n,j+=k){
-        //calculate normalized distance
-        double temp = center[j] - ps[i];    
-        //printf("Thread %3d Mean %lf Variance %lf Temp %lf Partsum %lf \n", threadIdx.x,  mean, v1, temp * temp,  sum);
-        sum += temp * temp / 2.0;
-    }
-    
-    return sum;
-}
-
 void transpose(double** src, double* dst, int n, int m){
     int i, j;
     for(i=0; i<n; i++){
@@ -200,10 +187,24 @@ void find_cluster_on_gpu(const double *dev_points, const double *dev_centers,
 }
 
 
+
+
+
 __global__
 void find_cluster_on_gpu3(const double *dev_points, const double *dev_centers, 
                          const int n, const int k, const int dim, 
                          double *result_clusters, int *result_clusters_old) {
+    /*
+        Description
+
+        This is the same kernel with the normal find_cluster_on_gpu
+        It is just augmented in order to populate the result_clusters_old array
+        which is used by the SAKM kernel.
+
+        This kernel is called just once after k++ init via the init_points_clusters 
+        func so I suppose it causes no harm apart from keeping yet another result_clusters
+        array in GPU Memory
+    */
 
     double min, dist;
     int cluster_it_belongs;
@@ -271,12 +272,6 @@ __global__ void init_RNG(curandState *devStates,  unsigned long seed){
     //Init curand for each thread
     //printf("Thread ID: %d Setting Seed %ld \n", index, seed);
     curand_init(seed, index, 0, &devStates[index]);
-}
-
-__device__ double calc_SA_prob(double de,  double dmin,  curandState* state){
-    double prop = exp(-abs(de-dmin)/sa_temp);
-    if (curand_uniform(state) > prop) return true;
-    return prop;
 }
 
 __global__
