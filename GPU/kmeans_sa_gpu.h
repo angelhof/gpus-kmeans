@@ -1,0 +1,29 @@
+#include "cublas_v2.h"
+#include "gpu_util.h"
+#include "kmeans_util_sa.h"
+#include <float.h>
+#include <stdio.h>
+#include <cuda.h>
+#include <curand.h>
+#include <curand_kernel.h>
+
+double kmeans_on_gpu_SA(
+    double* dev_points,
+    double* dev_centers,
+    int n, int k, int dim,
+    double* dev_points_clusters,
+    int* dev_points_clusters_old,
+    double* dev_points_in_cluster,
+    double* dev_centers_of_points,
+    double* dev_new_centers,
+    int* dev_check,
+    dim3 gpu_grid,
+    dim3 gpu_block,
+    //CUBLAS Shit
+    cublasHandle_t handle,
+    cublasStatus_t stat,
+    double* dev_ones,
+    double* dev_points_help,
+    double* dev_temp_centers,
+    curandState* devStates,
+    double temp);

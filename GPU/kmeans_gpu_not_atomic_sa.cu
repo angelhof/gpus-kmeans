@@ -5,6 +5,8 @@
 #include <time.h>
 #include "gpu_util.h"
 #include "kmeans_util_sa.h"
+#include "kmeans_minibatch_gpu.h" 
+#include "kmeans_sa_gpu.h" 
 #include "cublas_v2.h"
 #include <curand.h>
 #include <curand_kernel.h>
@@ -16,8 +18,8 @@
 
 #define DIMENSION 2
 #define KMEANS1
-#define SA1
-#define MINI_BATCHES
+#define SA
+#define MINI_BATCHES1
 
 int main(int argc, char *argv[]) {
     
@@ -159,16 +161,17 @@ int main(int argc, char *argv[]) {
             SA & K-MEANS ALGORITHM
         
     */
+#ifdef SA
     //SA config
     //SA starting temperature should be set so that the probablities of making moves on the very
     //first iteration should be very close to 1.
     //Start temp of 100 seems to be working good for the tested datasets
     double start_temp = 100.0;
     double temp = start_temp;
-    int eq_iterations = 100;
+    int eq_iterations = 160;
     double best_cost = DBL_MAX;
 
-#ifdef SA
+
     //SA loop
     printf("Starting SA on GPU \n");
     int eq_counter = 0;
@@ -266,7 +269,7 @@ int main(int argc, char *argv[]) {
     int BATCH_SIZE = 64;
         
     //Create batch arrays
-    double *batch_points, *batch_points_in_cluster, *batch_points_clusters;
+    double *batch_points, *batch_points_clusters;
     int *batch_points_clusters_old;
     batch_points = (double *) gpu_alloc(BATCH_SIZE*dim*sizeof(double));
     batch_points_clusters = (double *) gpu_alloc(BATCH_SIZE*k*sizeof(double));
