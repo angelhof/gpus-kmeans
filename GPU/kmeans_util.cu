@@ -11,7 +11,7 @@
 #   define EPS 1.e-6
 #endif
 
-// #define DEBUG
+extern __constant__ double dev_centers[CONSTANT_MEMORY];
 
 #ifdef DEBUG
 #define DPRINTF(fmt, args...) \
@@ -40,13 +40,13 @@ double squared_distance(double* ps, double* center, int dim) {
 }
 
 __device__
-double squared_distance_on_gpu(const double* ps, const double* center, const int n, const int k, const int dim) {
-//squared_distance_on_gpu(&dev_points[i], &dev_centers[j], n, k, dim);
+double squared_distance_on_gpu(const double* ps, const double* center, const int block_size, const int k, const int dim) {
     double sum = 0;
 
-    for (int i = 0, j=0; i < dim*n; i+=n,j+=k){
+    for (int i = 0, j=0; i < dim*n; i+=block_size,j+=k){
         double temp = center[j] - ps[i];
-        sum += temp * temp;
+        // sum = temp * temp + sum as a single operation
+        sum = fma(temp, temp, sum);
     }
 
     return sum;
@@ -128,81 +128,50 @@ double** init_centers_kpp(double **ps, int n, int k, int dim){
 }
 
 __global__
-void find_cluster_on_gpu(const double *dev_points, const double *dev_centers, 
+void find_cluster_on_gpu(const double *dev_points,
                          const int n, const int k, const int dim, 
                          double *result_clusters) {
 
     double min, dist;
-    int cluster_it_belongs;
-    const unsigned int index = get_global_tid();
-    const unsigned int thread_id = threadIdx.x;
-    extern __shared__ double local_centers[];
-
-    const unsigned int start = index;
-    const unsigned int end = start + 1;
-
-    // WARNING: Mporei na dhmiourgithei provlhma an ta threads sto block einai ligotera apo to k*dim
-    if(thread_id < k*dim){
-        local_centers[thread_id] = dev_centers[thread_id];
-    }
-    __syncthreads();
+    int cluster_it_belongs = 0;
+    register int index = get_global_tid();
+    register int j;
+    const int thread_id = threadIdx.x;
+    extern __shared__ double local_points[];
+    int block_size = blockDim.x;
 
     if (index < n){
-        for (int i = start; i < end; i++){
-            min = DBL_MAX;
-            for (int j = 0; j < k; j++){
-                result_clusters[j*n + i] = 0.0;
-                dist = squared_distance_on_gpu(&dev_points[i], &local_centers[j], n, k, dim);
+    	for (j = 0; j < dim; ++j){
+    		local_points[thread_id + j*block_size] = dev_points[index + j];
+    	}
 
-                if (min > dist){
-                    min = dist;
-                    cluster_it_belongs = j;
-                }
-                // cluster_it_belongs = j*(min > dist) + cluster_it_belongs*(min <= dist);
-                // min = min*(min <= dist) + dist*(min > dist);
-                // cluster_it_belongs = cluster_it_belongs ^ ((j ^ cluster_it_belongs) & -(min < dist));
-                // min = dist ^ ((min ^ dist) & -(min < dist));
-            }
-            // Only 1 in the cluster it belongs and everything else 0
-            // result_clusters[cluster_it_belongs*n + i] = 1.0;
-            result_clusters[cluster_it_belongs*n + i] = 1.0;
-            // for (int j = 0; j < k; j++){
-            //     printf("result_clusters[%d][%d] = %lf --> line[%d]\n", j, i, result_clusters[j*n + i], i+2);
-            // }
+        min = DBL_MAX;
+        for (j = 0; j < k; ++j){
+            result_clusters[j*n + index] = 0.0;
+            dist = squared_distance_on_gpu(&local_points[thread_id], &dev_centers[j], block_size, k, dim);
+            min = fmin(min, dist);
+            cluster_it_belongs = cluster_it_belongs ^ ((j ^ cluster_it_belongs) & (min == dist));
         }
+        result_clusters[cluster_it_belongs*n + index] = 1.0;
     }
 }
 
 __global__
-void update_center_on_gpu(const int n, const int k, const int dim, 
-                          double* dev_centers, 
+void update_center_on_gpu(const int k, const int dim, 
+			  double* dev_new_centers,
                           const double* dev_points_in_cluster){
-    int i, j;
-    const unsigned int index = get_global_tid();
-
-    const unsigned int start = index;
-    const unsigned int end = start + 1;
-
+    int j;
+    const int index = get_global_tid();
 
     // do all numbers in k*dim threads 
     if (index < k){
-        for (i = start; i < end; i++) {
-            // printf("dev_points_in_cluster[%d] = %d\n", i, (int)dev_points_in_cluster[i]);
-            // for (j = 0; j < dim; j++){
-            //     printf("dev_centers[%d][%d] = %lf\n", i, j, dev_centers[i*dim + j]);
-            // }
-            if (dev_points_in_cluster[i] > 0) {
-                #pragma unroll
-                for (j = 0; j < dim; j++){
-                    // FIXME: Two arrays here because of the transposed reslults of CUBLAS
-                    //dev_temp_centers[i*dim + j] = dev_centers[j*k + i] / (int)dev_points_in_cluster[i];
-                    dev_centers[j*k + i] /= dev_points_in_cluster[i];
-                }
-                // printf("Points in cluster: %d, %d\n", index, dev_points_in_cluster[i]);
+        if (dev_points_in_cluster[index] > 0) {
+		printf("Before: Dev_new_centers[%d][%d] = %d\n", index, j, dev_new_centers[j*k+index]);
+            #pragma unroll
+            for (j = 0; j < dim; j++){
+                dev_new_centers[j*k + index] /= dev_points_in_cluster[index];
             }
-            // for (j = 0; j < dim; j++){
-            //     printf("new_dev_centers[%d][%d] = %lf\n", i, j, dev_centers[i*dim + j]);
-            // }
+		printf("After: Dev_new_centers[%d][%d] = %d\n", index, j, dev_new_centers[j*k+index]);
         }
     }
 }
@@ -232,14 +201,12 @@ void swap(double** src, double** dst){
 
 void kmeans_on_gpu(
             double* dev_points,
-            double* dev_centers,
             int n, int k, int dim,
             double* dev_points_clusters,
             double* dev_points_in_cluster,
             double* dev_new_centers,
             int* dev_check,
             int BLOCK_SIZE, 
-            //CUBLAS Shit
             cublasHandle_t handle,
             cublasStatus_t stat,
             double* dev_ones,
@@ -255,15 +222,14 @@ void kmeans_on_gpu(
     // printf("Grid size : %dx%d\n", gpu_grid.x, gpu_grid.y);
     // printf("Block size: %dx%d\n", gpu_block.x, gpu_block.y);
     // printf("Shared memory size: %ld bytes\n", shmem_size);
-
+	printf("A\n");
     // assign points to clusters - step 1
-    find_cluster_on_gpu<<<gpu_grid,gpu_block, k*dim*sizeof(double)>>>(
+    find_cluster_on_gpu<<<gpu_grid,gpu_block, BLOCK_SIZE*dim*sizeof(double)>>>(
         dev_points,
-        dev_centers,
         n, k, dim,
         dev_points_clusters);
     cudaDeviceSynchronize();
-    
+    printf("B\n");
     // update means - step 2
     cublasDgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N,
                 k, dim, n,
@@ -273,7 +239,7 @@ void kmeans_on_gpu(
                 &beta,
                 dev_new_centers, k);
     // cudaDeviceSynchronize();
-
+	printf("C\n");
     cublasDgemv(handle, CUBLAS_OP_T,
                 n, k,
                 &alpha,
@@ -282,14 +248,14 @@ void kmeans_on_gpu(
                 &beta,
                 dev_points_in_cluster, 1);
     // cudaDeviceSynchronize();
-
+	printf("D\n");
     // Update centers based on counted points
     update_center_on_gpu<<<gpu_grid,gpu_block>>>(
-        n, k, dim,
+        k, dim,
         dev_new_centers,
         dev_points_in_cluster);
     cudaDeviceSynchronize();
-    
+    printf("E\n");
     //Check for convergence with CUBLAS
     //dev_new_centers and dev_centers arrays are actually checked for equality
     //No distances are calculated separately for each center point.
@@ -307,8 +273,14 @@ void kmeans_on_gpu(
     // cudaDeviceSynchronize();
     if (!(check > EPS)) icheck = 1;
     copy_to_gpu(&icheck, dev_check, sizeof(int));
-    
+    printf("E\n");
     //Update new centers
     // TODO: Swap pointers
-    cudaMemcpy(dev_centers, dev_new_centers, sizeof(double)*k*dim, cudaMemcpyDeviceToDevice);
+    
+    if(cudaMemcpyToSymbol(dev_centers, dev_new_centers, sizeof(double)*k*dim, 0, cudaMemcpyDeviceToDevice) != cudaSuccess){
+    	printf("Error in copy_from_gpu centers\n");
+    	return -1;
+    }
+    
+	printf("F\n");
 }

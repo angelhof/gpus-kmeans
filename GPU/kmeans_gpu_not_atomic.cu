@@ -11,6 +11,7 @@
 //#define BLOCK_SIZE 256
 #define DIMENSION 2
 
+double dev_centers[CONSTANT_MEMORY];
 
 #if __CUDA_ARCH__ < 600
 __device__ double doubleAtomicAdd(double* address, double val)
@@ -91,13 +92,12 @@ int main(int argc, char *argv[]) {
     points_clusters = (int *)calloc(n, sizeof(int));
     
     // GPU allocations
-    double *dev_centers, *dev_points;
+    double *dev_points;
     double *dev_new_centers;
     double *dev_points_clusters;
     double *dev_points_in_cluster;
     double *dev_ones;
 
-    dev_centers = (double *) gpu_alloc(k*dim*sizeof(double));
     dev_points = (double *) gpu_alloc(n*dim*sizeof(double));
     dev_points_in_cluster = (double *) gpu_alloc(k*sizeof(double));
     dev_points_clusters = (double *) gpu_alloc(n*k*sizeof(double));
@@ -122,9 +122,9 @@ int main(int argc, char *argv[]) {
     }
 
     // Copy centers to GPU
-    if (copy_to_gpu(staging_centers, dev_centers, k*dim*sizeof(double)) != 0) {
-        printf("Error in copy_to_gpu centers\n");
-        return -1;
+    if(cudaMemcpyToSymbol(dev_centers, staging_centers, k*dim*sizeof(double), 0, cudaMemcpyHostToDevice) != cudaSuccess){
+    	printf("Error in copy_to_gpu centers\n");
+    	return -1;
     }
 
     // FIXME: For now we pass TWO matrices for centers, one normal and 
@@ -150,7 +150,6 @@ int main(int argc, char *argv[]) {
     while (!check) {
         kmeans_on_gpu(
                     dev_points,
-                    dev_centers,
                     n, k, dim,
                     dev_points_clusters,
                     dev_points_in_cluster,
@@ -169,8 +168,8 @@ int main(int argc, char *argv[]) {
         
         step += 1;
         //free new_centers
-        // if (step == 3) break;
-        // delete_points(new_centers);
+        if (step == 4) break;
+        //delete_points(new_centers);
     }
 
     double time_elapsed = (double)(clock() - start) / CLOCKS_PER_SEC;
@@ -188,7 +187,12 @@ int main(int argc, char *argv[]) {
     
     f = fopen("centers.out", "w");
     
-    copy_from_gpu(staging_centers, dev_centers, k*dim*sizeof(double));
+    if(cudaMemcpyFromSymbol(staging_centers, dev_centers, k*dim*sizeof(double), 0, cudaMemcpyDeviceToHost) != cudaSuccess){
+    	printf("Error in copy_from_gpu centers\n");
+    	return -1;
+    }
+    
+    
     printf("Centers:\n");
     for (i = 0; i < k; i++) {
         for (j = 0; j < dim; j++){
@@ -210,7 +214,6 @@ int main(int argc, char *argv[]) {
     fclose(f);
     
     // GPU clean
-    gpu_free(dev_centers);
     gpu_free(dev_new_centers);
     gpu_free(dev_points);
     gpu_free(dev_points_clusters);
