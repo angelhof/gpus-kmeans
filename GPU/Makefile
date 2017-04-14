@@ -11,15 +11,19 @@ CUBLAS_PATH=-L$(CUDA_PREFIX)/lib64
 
 all: kmeans_gpu run
 
-kmeans_util.o: kmeans_util.cu
-	$(GPU_COMP) $(CUDA_FLAGS) -c kmeans_util.cu $(GPU_FLAGS)
+
+gpu_minibatch_util.o: kmeans_minibatch_gpu.cu
+	$(GPU_COMP) $(CUDA_FLAGS) -c kmeans_minibatch_gpu.cu $(GPU_FLAGS) -o gpu_minibatch_util.o
+
+kmeans_util.o: kmeans_util_sa.cu
+	$(GPU_COMP) $(CUDA_FLAGS) -c kmeans_util_sa.cu $(GPU_FLAGS) -o kmeans_util.o
 
 gpu_util.o: gpu_util.cu
 	$(GPU_COMP) $(CUDA_FLAGS) -c gpu_util.cu $(GPU_FLAGS)
 
-kmeans_gpu: gpu_util.o kmeans_util.o kmeans_gpu_not_atomic.cu
-	$(GPU_COMP) $(CUDA_FLAGS) -c kmeans_gpu_not_atomic.cu -o kmeans_gpu.o
-	$(GPU_COMP) $(CUDA_FLAGS) kmeans_gpu.o gpu_util.o kmeans_util.o -o kmeans_gpu $(CUBLAS_PATH) $(CUBLAS)
+kmeans_gpu: gpu_util.o kmeans_util.o gpu_minibatch_util.o kmeans_gpu_not_atomic_sa.cu
+	$(GPU_COMP) $(CUDA_FLAGS) -c kmeans_gpu_not_atomic_sa.cu -o kmeans_gpu.o
+	$(GPU_COMP) $(CUDA_FLAGS) gpu_minibatch_util.o kmeans_gpu.o gpu_util.o kmeans_util.o -o kmeans_gpu $(CUBLAS_PATH) $(CUBLAS)
 
 check_architectures: check_architecture.cu
 	$(GPU_COMP) $(CUDA_FLAGS) check_architecture.cu -o get_arch
@@ -27,9 +31,9 @@ check_architectures: check_architecture.cu
 
 run:
 	# ./kmeans_gpu 256 "../data/road_spatial_network_dataset/spatial_network.data"
-	#./kmeans_gpu 32 "../data/dataset_100_5_2_0"
-	./kmeans_gpu 32 "../data/input.in"
+	./kmeans_gpu 32 "../data/dataset_100_5_2_0"
+	# ./kmeans_gpu 32 "../data/input.in"
 	# ./kmeans_gpu < ../data/input.in
 	
 clean:
-	rm ./kmeans_gpu *.o
+	rm ./kmeans_gpu *.o *out

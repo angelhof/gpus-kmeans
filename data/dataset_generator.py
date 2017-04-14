@@ -27,7 +27,7 @@ def main():
 
     f = open("_".join(["dataset", str(n), str(k), str(dim), str(mode)]), 'w')
     # Write descriptors
-    f.writelines(" ".join(map(str, [n, k])) + '\n')
+    f.writelines(" ".join(map(str, [n, k, dim])) + '\n')
 
     for i in range(n):
         if mode == 0:
