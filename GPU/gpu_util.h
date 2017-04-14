@@ -9,3 +9,7 @@ int copy_from_gpu(void *host, const void *gpu, size_t count);
 const char *gpu_get_errmsg(cudaError_t err);
 
 const char *gpu_get_last_errmsg();   
+
+#ifndef CONSTANT_MEMORY
+#   define CONSTANT_MEMORY 22*4*sizeof(double)
+#endif

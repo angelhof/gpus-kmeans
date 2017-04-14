@@ -12,7 +12,6 @@ void transpose(double** src, double* dst, int n, int m);
 
 void kmeans_on_gpu(
             double* dev_points,
-            double* dev_centers,
             int n, int k, int dim,
             double* dev_points_clusters,
             double* dev_points_in_cluster,
