@@ -5,6 +5,8 @@
 #include <time.h>
 #include "gpu_util.h"
 #include "kmeans_util_sa.h"
+#include "kmeans_minibatch_gpu.h" 
+#include "kmeans_sa_gpu.h" 
 #include "cublas_v2.h"
 #include <curand.h>
 #include <curand_kernel.h>
@@ -15,9 +17,9 @@
 //#define BLOCK_SIZE 256
 
 #define DIMENSION 2
-#define KMEANS
+#define KMEANS1
 #define SA
-#define MINI_BATCHES
+#define MINI_BATCHES1
 
 int main(int argc, char *argv[]) {
     
@@ -101,7 +103,8 @@ int main(int argc, char *argv[]) {
     dev_points_help = (double *) gpu_alloc(n*sizeof(double));
     
     printf("GPU allocs done \n");
-    
+    //Nullify the counter array
+    cudaMemset(dev_points_in_cluster, 0x0, k*sizeof(double));
     call_create_dev_ones(dev_ones, n, gpu_grid, gpu_block);
     // Transpose points and centers for cublas
     // TODO: Transpose at cublas in gpu
@@ -145,29 +148,30 @@ int main(int argc, char *argv[]) {
     int* dev_check = (int *) gpu_alloc(sizeof(int));
     double* dev_cost = (double *) gpu_alloc(sizeof(double));
 
-    // printf("Loop Start \n");
-    // Debug
-    // for(i=0;i<k;i++){
-    //     for(j=0;j<k*dim;j+=k)
-    //         printf("%lf,\t", staging_centers[j + i]);
-    //     printf("\n");
-    // }
+    printf("Centers Init \n");
+    //Debug
+    for(i=0;i<k;i++){
+        for(j=0;j<k*dim;j+=k)
+            printf("%lf,\t", staging_centers[j + i]);
+        printf("\n");
+    }
     srand(unsigned(time(NULL)));
 
     /*
             SA & K-MEANS ALGORITHM
         
     */
+#ifdef SA
     //SA config
     //SA starting temperature should be set so that the probablities of making moves on the very
     //first iteration should be very close to 1.
     //Start temp of 100 seems to be working good for the tested datasets
     double start_temp = 100.0;
     double temp = start_temp;
-    int eq_iterations = 100;
+    int eq_iterations = 160;
     double best_cost = DBL_MAX;
 
-#ifdef SA
+
     //SA loop
     printf("Starting SA on GPU \n");
     int eq_counter = 0;
@@ -223,7 +227,7 @@ int main(int argc, char *argv[]) {
         eq_counter++;
     }
     //Storing global best to temp_centers
-    cudaMemcpy(dev_centers, dev_temp_centers, sizeof(double)*k*dim, cudaMemcpyDeviceToDevice);
+    cudaMemcpy(dev_new_centers, dev_temp_centers, sizeof(double)*k*dim, cudaMemcpyDeviceToDevice);
     cudaMemcpy(dev_points_clusters, dev_temp_points_clusters, sizeof(double)*k*n, cudaMemcpyDeviceToDevice);
     printf("SA Steps %d \n", step);
 #endif
@@ -260,9 +264,70 @@ int main(int argc, char *argv[]) {
     printf("KMeans algorithm steps %d \n", step);
 #endif
 
+#ifdef MINI_BATCHES
+
+    int BATCH_SIZE = 64;
+        
+    //Create batch arrays
+    double *batch_points, *batch_points_clusters;
+    int *batch_points_clusters_old;
+    batch_points = (double *) gpu_alloc(BATCH_SIZE*dim*sizeof(double));
+    batch_points_clusters = (double *) gpu_alloc(BATCH_SIZE*k*sizeof(double));
+    batch_points_clusters_old = (int *) gpu_alloc(BATCH_SIZE*sizeof(int));
+
+    step = 0;
+    double cost = DBL_MAX;
+    printf("Mini Batch KMeans Algorithm \n");
+    while (step < 50000) {
+        // Serial minibatch loops internally no need for further repeats here
+        // cost = kmeans_serial_MINIBATCH(
+        //                 dev_points,
+        //                 dev_centers,
+        //                 dev_new_centers,
+        //                 dev_points_in_cluster, 
+        //                 n, k, dim,
+        //                 dev_points_clusters,
+        //                 devStates, 
+        //                 handle);
+        //break;
+
+        cost = kmeans_on_gpu_MINIBATCH(
+                          dev_points,
+                          dev_centers,
+                          n, k, dim,
+                          dev_points_clusters,
+                          dev_points_clusters_old,
+                          dev_points_in_cluster,
+                          dev_new_centers,
+                          dev_check,
+                          //CUBLAS Shit
+                          handle,
+                          stat,
+                          dev_ones,
+                          dev_points_help,
+                          dev_temp_centers,
+                          devStates, 
+                          //BATCH arrays
+                          BATCH_SIZE, 
+                          batch_points, 
+                          batch_points_clusters, 
+                          batch_points_clusters_old);
+        
+
+        //printf("Step %4d Cost: %lf \n", step, cost);
+        step += 1;
+    }
+
+    cudaFree(batch_points);
+    cudaFree(batch_points_clusters);
+    cudaFree(batch_points_clusters_old);
+
+    printf("Mini Batch KMeans algorithm steps %d \n", step);
+#endif
+
 
     //Post Processing
-    double eval = evaluate_solution(dev_points, dev_centers, dev_points_clusters, 
+    double eval = evaluate_solution(dev_points, dev_new_centers, dev_points_clusters, 
                   dev_centers_of_points, dev_points_help, 
                   n, k, dim, 
                   gpu_grid, gpu_block, 
