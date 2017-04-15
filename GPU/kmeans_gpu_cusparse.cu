@@ -3,8 +3,9 @@
 #include <stdlib.h>
 #include <time.h>
 #include "gpu_util.h"
-#include "kmeans_util.h"
+#include "kmeans_util_cusparse.h"
 #include "cublas_v2.h"
+#include "cusparse_v2.h"
 
 /* gpu parameters */
 //#define GRID_SIZE 16
@@ -36,8 +37,8 @@ int main(int argc, char *argv[]) {
     int dim = 2;
     double **points;
     
-    int BLOCK_SIZE = 256; //Default
-    if (argc > 1) BLOCK_SIZE = atoi(argv[1]);
+    int block_size = 256; //Default
+    if (argc > 1) block_size = atoi(argv[1]);
     
     //The second input argument should be the dataset filename
     FILE *in;
@@ -46,7 +47,6 @@ int main(int argc, char *argv[]) {
     } else {
         in = stdin;
     }
-
     //Parse file
     register short read_items = -1;
     read_items = fscanf(in, "%d %d %d\n", &n ,&k, &dim);
@@ -76,11 +76,20 @@ int main(int argc, char *argv[]) {
         printf ("CUBLAS initialization failed!\n");
         return EXIT_FAILURE;
     }
+
+    cusparseHandle_t cusparse_handle;
+    cusparseStatus_t cusparse_stat;
+
+    cusparse_stat = cusparseCreate(&cusparse_handle);
+    if (cusparse_stat != CUSPARSE_STATUS_SUCCESS) {
+        printf ("CUSPARSE initialization failed!\n");
+        return EXIT_FAILURE;
+    }
     
     // Calculate grid and block sizes
-    int grid_size = (n+BLOCK_SIZE-1)/BLOCK_SIZE;
+    int grid_size = (n+block_size-1)/block_size;
     dim3 gpu_grid(grid_size, 1);
-    dim3 gpu_block(BLOCK_SIZE, 1);
+    dim3 gpu_block(block_size, 1);
     
     printf("Grid size : %dx%d\n", gpu_grid.x, gpu_grid.y);
     printf("Block size: %dx%d\n", gpu_block.x, gpu_block.y);
@@ -97,16 +106,24 @@ int main(int argc, char *argv[]) {
     // GPU allocations
     double *dev_centers, *dev_points;
     double *dev_new_centers;
-    double *dev_points_clusters;
-    double *dev_points_in_cluster;
+    // double *dev_points_clusters;
+    int *dev_points_in_cluster;
     double *dev_ones;
+    // int* dev_nnzPerRow;
+    double* dev_csrVal_points_clusters;
+    int* dev_csrRowPtr_points_clsusters;
+    int* dev_csrColInd_points_clsusters;
 
     dev_centers = (double *) gpu_alloc(k*dim*sizeof(double));
     dev_points = (double *) gpu_alloc(n*dim*sizeof(double));
-    dev_points_in_cluster = (double *) gpu_alloc(k*sizeof(double));
-    dev_points_clusters = (double *) gpu_alloc(n*k*sizeof(double));
+    dev_points_in_cluster = (int *) gpu_alloc(k*sizeof(int));
+    // dev_points_clusters = (double *) gpu_alloc(n*k*sizeof(double));
     dev_new_centers = (double *) gpu_alloc(k*dim*sizeof(double));
     dev_ones = (double *) gpu_alloc(n*sizeof(double));
+    // dev_nnzPerRow = (int *) gpu_alloc(k*sizeof(int));
+    dev_csrVal_points_clusters = (double *) gpu_alloc(n*sizeof(double));
+    dev_csrRowPtr_points_clsusters = (int *) gpu_alloc((k+1)*sizeof(int));
+    dev_csrColInd_points_clsusters = (int *) gpu_alloc(n*sizeof(int));
     
     printf("GPU allocs done \n");
     
@@ -150,13 +167,18 @@ int main(int argc, char *argv[]) {
                     dev_points,
                     dev_centers,
                     n, k, dim,
-                    dev_points_clusters,
+                    // dev_points_clusters,
                     dev_points_in_cluster,
                     dev_new_centers,
                     dev_check,
-                    BLOCK_SIZE,
+                    block_size,
                     handle,
-                    dev_ones);
+                    dev_ones,
+                    cusparse_handle,
+                    // dev_nnzPerRow,
+                    dev_csrVal_points_clusters,
+                    dev_csrRowPtr_points_clsusters,
+                    dev_csrColInd_points_clsusters);
         
         copy_from_gpu(&check, dev_check, sizeof(int));
         
@@ -167,7 +189,7 @@ int main(int argc, char *argv[]) {
         // if (step == 3) break;
     }
 
-    printf("Total num. of steps is %d.\n", step);
+    printf("Total num. of steps is %d.\n", step);   
 
     double time_elapsed = (double)(clock() - start) / CLOCKS_PER_SEC;
     printf("Total Time Elapsed: %lf seconds\n", time_elapsed);
@@ -211,12 +233,23 @@ int main(int argc, char *argv[]) {
     gpu_free(dev_centers);
     gpu_free(dev_points);
     gpu_free(dev_points_in_cluster);
-    gpu_free(dev_points_clusters);
+    // gpu_free(dev_points_clusters);
+    gpu_free(dev_new_centers);
     gpu_free(dev_ones);
+    // gpu_free(dev_nnzPerRow);
+    gpu_free(dev_csrVal_points_clusters);
+    gpu_free(dev_csrRowPtr_points_clsusters);
+    gpu_free(dev_csrColInd_points_clsusters);
 
     stat = cublasDestroy(handle);
     if (stat != CUBLAS_STATUS_SUCCESS) {
         printf ("CUBLAS initialization failed!\n");
+        return EXIT_FAILURE;
+    }
+
+    cusparse_stat = cusparseDestroy(cusparse_handle);
+    if (cusparse_stat != CUSPARSE_STATUS_SUCCESS) {
+        printf ("CUSPARSE initialization failed!\n");
         return EXIT_FAILURE;
     }
 

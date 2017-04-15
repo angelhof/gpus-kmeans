@@ -7,19 +7,27 @@ GPU_BACKEND=g++
 GPU_FLAGS=--ptxas-options=-v
 GPU_ARCH=-arch sm_20
 CUBLAS=-lcublas
+CUSPARSE=-lcusparse
 CUBLAS_PATH=-L$(CUDA_PREFIX)/lib64
 
-all: kmeans_gpu run
-
-kmeans_util.o: kmeans_util.cu
-	$(GPU_COMP) $(CUDA_FLAGS) -c kmeans_util.cu $(GPU_FLAGS)
+all: kmeans_gpu kmeans_gpu_cusparse
 
 gpu_util.o: gpu_util.cu
 	$(GPU_COMP) $(CUDA_FLAGS) -c gpu_util.cu $(GPU_FLAGS)
 
+kmeans_util.o: kmeans_util.cu
+	$(GPU_COMP) $(CUDA_FLAGS) -c kmeans_util.cu $(GPU_FLAGS)
+
 kmeans_gpu: gpu_util.o kmeans_util.o kmeans_gpu_not_atomic.cu
 	$(GPU_COMP) $(CUDA_FLAGS) -c kmeans_gpu_not_atomic.cu -o kmeans_gpu.o
 	$(GPU_COMP) $(CUDA_FLAGS) kmeans_gpu.o gpu_util.o kmeans_util.o -o kmeans_gpu $(CUBLAS_PATH) $(CUBLAS)
+
+kmeans_util_cusparse.o: kmeans_util_cusparse.cu
+	$(GPU_COMP) $(CUDA_FLAGS) $(CUSPARSE) -c kmeans_util_cusparse.cu $(GPU_FLAGS)
+
+kmeans_gpu_cusparse: gpu_util.o kmeans_util_cusparse.o kmeans_gpu_cusparse.cu
+	$(GPU_COMP) $(CUDA_FLAGS) -c kmeans_gpu_cusparse.cu -o kmeans_gpu_cusparse.o
+	$(GPU_COMP) $(CUDA_FLAGS) kmeans_gpu_cusparse.o gpu_util.o kmeans_util_cusparse.o -o kmeans_gpu_cusparse $(CUBLAS_PATH) $(CUBLAS) $(CUSPARSE)
 
 check_architectures: check_architecture.cu
 	$(GPU_COMP) $(CUDA_FLAGS) check_architecture.cu -o get_arch
@@ -32,4 +40,4 @@ run:
 	# ./kmeans_gpu < ../data/input.in
 	
 clean:
-	rm ./kmeans_gpu *.o
+	rm ./kmeans_gpu ./kmeans_gpu_cusparse *.o
