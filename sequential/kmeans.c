@@ -8,8 +8,6 @@
 #define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
 #define MAX(X, Y) (((X) > (Y)) ? (X) : (Y))
 
-#define METHOD 2
-
 // #define DEBUG
 
 #ifdef DEBUG
@@ -27,7 +25,6 @@ double distance(double* ps, double* center, int dim) {
     int i;
     double sum = 0;
 
-    // Xreiazetai sqrt???
     for (i = 0; i < dim; i++){
         double temp = center[i] - ps[i];
         sum += temp * temp;
@@ -69,43 +66,19 @@ void delete_points(double** ps){
     ps = NULL;
 }
 
-
-
-// #if METHOD == 2
-// double** init_centers(double **ps, int n, int k, int dim) {
-//     int i, j;
-//     int chosen = 0;
-//     double **centers;
-//     char *used_points;
-
-//     centers = create_points(k, dim);
-//     used_points = (char *)calloc(n, sizeof(char));
-//     srand(time(NULL));
-//     for (i = 0; i < k; i++) {
-//         do {
-//             chosen = rand() % n;
-//         } while (used_points[chosen] != 0);
-//         used_points[chosen] = 1;
-//         for (j = 0; j < dim; j++)
-//             centers[i][j] = ps[chosen][j];
-//     }
-    
-//     return centers;
-// }
-// #endif
-
-
 double** init_centers_kpp(double **ps, int n, int k, int dim){
-    int i,j;
+    int i;
     int curr_k = 0;
     int first_i;
     int max, max_i;
-    double distances_from_centers[n];
+    double *distances_from_centers, *temp_distances;
+    distances_from_centers = (double*) malloc(sizeof(double)*n);
     double **centers = create_points(k,dim);
-    double temp_distances[n];
-
+    temp_distances = (double*) malloc(sizeof(double)*n);
+    
     // Initialize with max double
-    for (int i = 0; i < n; i++) distances_from_centers[i] = DBL_MAX;
+    for (i = 0; i < n; i++)
+        distances_from_centers[i] = DBL_MAX;
 
     srand(time(NULL));
 
@@ -120,23 +93,23 @@ double** init_centers_kpp(double **ps, int n, int k, int dim){
     while(curr_k < k-1) {
         max = -1;
         max_i = -1;
-        for(i=0;i<n;i++){
-            DPRINTF("New distance: %f and old min distance: %f", distance(ps[i], centers[curr_k], dim), distances_from_centers[i]);
-            temp_distances[i] = MIN(distance(ps[i], centers[curr_k], dim), distances_from_centers[i]);    
+        for(i=0; i<n; i++){
+            DPRINTF("New squared_distance: %f and old min squared_distance: %f", squared_distance(ps[i], centers[curr_k], dim), distances_from_centers[i]);
+            temp_distances[i] = MIN(distance(ps[i], centers[curr_k], dim), distances_from_centers[i]);  
             if(temp_distances[i] > max){
                 max = temp_distances[i];
                 max_i = i;
             }
         }
  
-
         memcpy(distances_from_centers, temp_distances, n * sizeof(double));
         memcpy(centers[++curr_k], ps[max_i], dim * sizeof(double));
-    }   
+    }
+    
+    free(temp_distances);
+    free(distances_from_centers);
     return centers;
 }
-
-
 
 int find_cluster(double* ps, double** centers, int n, int k, int dim) {
     int cluster = 0;
@@ -177,45 +150,74 @@ double* update_center(double** ps, char* cluster, int n, int dim) {
     return new_center;
 }
 
-int main() {
+int main(int argc, char *argv[]) {
     // read input
     int n, k, i, j;
     int dim = 3;
     double **points;
 
-    scanf("%d %d", &n, &k);
-    points = create_points(n, dim);
-    for (i = 0; i < n; i++) {
-        for (j = 0; j < dim; j++)
-            scanf("%lf", &points[i][j]);
+    //The first input argument should be the dataset filename
+    FILE *in;
+    if (argc > 1) {
+        in = fopen(argv[1], "r");
+    } else {
+        in = stdin;
     }
+    //Parse file
+    register short read_items = -1;
+    read_items = fscanf(in, "%d %d %d\n", &n ,&k, &dim);
+    if (read_items != 3){
+        printf("Something went wrong with reading the parameters!\n");
+        return EXIT_FAILURE;
+    }
+    points = create_points(n, dim);
+    for (i =0; i<n; i++) {
+        for (j=0; j<dim; j++) {
+            read_items = fscanf(in, "%lf", &points[i][j]);
+            if (read_items != 1) {
+                printf("Something went wrong with reading the points!\n");
+            }
+        }
+    }
+    fclose(in);
+    
+    clock_t start = clock();
 
-    
-    // #if METHOD == 2
-    // // initiate centers
-    // double **centers;
-    // centers = init_centers(points, n, k, dim);
-    // #endif
-    
     double **centers;
+    printf("Initializing Centers...\n");
     centers = init_centers_kpp(points, n, k, dim);
+    printf("Initializing Centers done\n");
+
+    printf("Initial centers:\n");
+    // Debug
+    for(i=0;i<k;i++){
+        for(j=0;j<dim;j++)
+            printf("%lf,\t", centers[i][j]);
+        printf("\n");
+    }
 
     // start algorithm
     double check = 1;
-    double eps = 1.0E-6;
+    double eps = 1.0E-7;
     char **clusters;
     int *prev_clusters;
     int cl;
+    int step = 0;
 
     clusters = create_clusters(k, n);
     prev_clusters = (int *)calloc(n, sizeof(int));
 
+    printf("Loop Start...\n");
     while (check > eps) {
         // assign points
         for (i = 0; i < n; i++) {
             cl = find_cluster(points[i], centers, n, k, dim);
             int prev = prev_clusters[i];
-            if (cl != prev) {
+            if (step == 0) {
+                clusters[cl][i] = 1;
+                prev_clusters[i] = cl;
+            }
+            else if (cl != prev) {
                 clusters[cl][i] = 1;
                 clusters[prev][i] = 0;
                 prev_clusters[i] = cl;
@@ -229,12 +231,18 @@ int main() {
             new_center = update_center(points, clusters[j], n, dim);
             if (new_center[dim] > 0) {
                 check += sqrt(distance(new_center, centers[j], dim));
-                // ISWS MEMCPY ???
                 for (i = 0; i < dim; i++) centers[j][i] = new_center[i];
             }
         }
-
+        step += 1;
+        // printf("Step %d Check: %d \n", step, check);
+        // if (step == 3) break;    
     }
+
+    printf("Total num. of steps is %d.\n", step);
+
+    double time_elapsed = (double)(clock() - start) / CLOCKS_PER_SEC;
+    printf("Total Time Elapsed: %lf seconds\n", time_elapsed);
 
     // print results
     printf("Centers:\n");

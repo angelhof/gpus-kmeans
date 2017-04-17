@@ -131,20 +131,19 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    printf("Loop Start \n");
-    
     int step = 0;
     int check = 0;
     int* dev_check = (int *) gpu_alloc(sizeof(int));
 
-
     // Debug
+    printf("Initial centers:\n");
     for(i=0;i<k;i++){
         for(j=0;j<dim;j++)
             printf("%lf,\t", centers[i][j]);
         printf("\n");
     }
 
+    printf("Loop Start...\n");
     while (!check) {
         kmeans_on_gpu(
                     dev_points,

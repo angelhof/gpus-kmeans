@@ -7,9 +7,6 @@
 #include "cublas_v2.h"
 #include "cusparse_v2.h"
 
-/* gpu parameters */
-//#define GRID_SIZE 16
-//#define BLOCK_SIZE 256
 
 #if __CUDA_ARCH__ < 600
 __device__ double doubleAtomicAdd(double* address, double val)
@@ -91,8 +88,17 @@ int main(int argc, char *argv[]) {
     dim3 gpu_grid(grid_size, 1);
     dim3 gpu_block(block_size, 1);
     
-    printf("Grid size : %dx%d\n", gpu_grid.x, gpu_grid.y);
-    printf("Block size: %dx%d\n", gpu_block.x, gpu_block.y);
+    if (grid_size > 1024*128) {
+        grid_size = 1024;
+    }
+
+    // Calculate the new grid and block sizes
+    int b_size = block_size;
+    // int b_size = 32;
+    // while (b_size < k) b_size += 32;
+    
+    printf("Grid size : %dx%d\n", grid_size, 1);
+    printf("Block size: %dx%d\n", block_size, 1);
     
     clock_t start = clock();
     
@@ -135,6 +141,9 @@ int main(int argc, char *argv[]) {
     double * staging_centers = (double*) calloc(k*dim, sizeof(double));
     transpose(points, staging_points, n, dim);
     transpose(centers, staging_centers, k, dim);
+    
+    // Synchronize is for dev_ones
+    cudaDeviceSynchronize();
 
     // Copy points to GPU
     if (copy_to_gpu(staging_points, dev_points, n*dim*sizeof(double)) != 0) {
@@ -148,42 +157,36 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    printf("Loop Start \n");
-    
     int step = 0;
     int check = 0;
-    int* dev_check = (int *) gpu_alloc(sizeof(int));
-
 
     // Debug
+    printf("Initial centers:\n");
     for(i=0;i<k;i++){
         for(j=0;j<dim;j++)
             printf("%lf,\t", centers[i][j]);
         printf("\n");
     }
 
+    printf("Loop Start...\n");
     while (!check) {
-        kmeans_on_gpu(
+        check = kmeans_on_gpu(
                     dev_points,
                     dev_centers,
                     n, k, dim,
-                    // dev_points_clusters,
                     dev_points_in_cluster,
                     dev_new_centers,
-                    dev_check,
                     block_size,
+                    grid_size,
+                    b_size,
                     handle,
                     dev_ones,
                     cusparse_handle,
-                    // dev_nnzPerRow,
                     dev_csrVal_points_clusters,
                     dev_csrRowPtr_points_clsusters,
                     dev_csrColInd_points_clsusters);
         
-        copy_from_gpu(&check, dev_check, sizeof(int));
-        
         // printf("Step %d Check: %d \n", step, check);
-        //if (check < EPS) break;
         
         step += 1;
         // if (step == 3) break;

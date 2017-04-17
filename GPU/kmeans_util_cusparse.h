@@ -11,21 +11,20 @@ void call_create_dev_ones(double* dev_ones, int n, dim3 gpu_grid, dim3 gpu_block
 
 void transpose(double** src, double* dst, int n, int m);
 
-void kmeans_on_gpu(
-            double* dev_points,
+int kmeans_on_gpu(
+            const double* dev_points,
             double* dev_centers,
-            int n, int k, int dim,
-            // double* dev_points_clusters,
+            const int n, const int k, const int dim,
             int* dev_points_in_cluster,
             double* dev_new_centers,
-            int* dev_check,
-            int block_size, 
+            const int block_size,
+            const int grid_size,
+            const int b_size,
             //CUBLAS shit
             cublasHandle_t handle,
-            double* dev_ones,
+            const double* dev_ones,
             //CUSPARSE shit
             cusparseHandle_t cusparse_handle,
-            // int* dev_nnzPerRow,
             double* dev_csrVal_points_clusters,
             int* dev_csrRowPtr_points_clsusters,
             int* dev_csrColInd_points_clsusters);
