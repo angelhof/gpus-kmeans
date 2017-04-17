@@ -19,7 +19,6 @@ int kmeans_on_gpu(
             double* dev_new_centers,
             const int block_size,
             const int grid_size,
-            const int b_size,
             //CUBLAS shit
             cublasHandle_t handle,
             const double* dev_ones,

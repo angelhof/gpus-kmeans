@@ -210,7 +210,6 @@ int kmeans_on_gpu(
             double* dev_new_centers,
             const int block_size,
             const int grid_size,
-            const int b_size,
             //CUBLAS shit
             cublasHandle_t handle,
             const double* dev_ones,
@@ -319,12 +318,9 @@ int kmeans_on_gpu(
 
     cusparseDestroyMatDescr(descrA);
 
-    dim3 new_gpu_grid(dim, 1);
-    dim3 new_gpu_block(b_size, 1);
     const int size = k * dim;
     // Update centers based on counted points
-    // printf("%d %d\n", b_size, grid_size);
-    update_center_on_gpu<<<new_gpu_grid, new_gpu_block>>>(
+    update_center_on_gpu<<<gpu_grid, gpu_block>>>(
         size, k,
         dev_new_centers,
         dev_points_in_cluster);

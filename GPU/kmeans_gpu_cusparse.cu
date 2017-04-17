@@ -34,13 +34,15 @@ int main(int argc, char *argv[]) {
     int dim = 2;
     double **points;
     
-    int block_size = 256; //Default
+    int block_size = 256;
+    int grid_size = 1024;
     if (argc > 1) block_size = atoi(argv[1]);
+    if (argc > 2) grid_size = atoi(argv[2]);
     
     //The second input argument should be the dataset filename
     FILE *in;
-    if (argc > 2) {
-        in = fopen(argv[2], "r");
+    if (argc > 3) {
+        in = fopen(argv[3], "r");
     } else {
         in = stdin;
     }
@@ -84,18 +86,8 @@ int main(int argc, char *argv[]) {
     }
     
     // Calculate grid and block sizes
-    int grid_size = (n+block_size-1)/block_size;
-    dim3 gpu_grid(grid_size, 1);
+    dim3 gpu_grid((n+block_size-1)/block_size, 1);
     dim3 gpu_block(block_size, 1);
-    
-    if (grid_size > 1024*128) {
-        grid_size = 1024;
-    }
-
-    // Calculate the new grid and block sizes
-    int b_size = block_size;
-    // int b_size = 32;
-    // while (b_size < k) b_size += 32;
     
     printf("Grid size : %dx%d\n", grid_size, 1);
     printf("Block size: %dx%d\n", block_size, 1);
@@ -157,16 +149,16 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
+    // Debug
+    // printf("Initial centers:\n");
+    // for(i=0;i<k;i++){
+    //     for(j=0;j<dim;j++)
+    //         printf("%lf,\t", centers[i][j]);
+    //     printf("\n");
+    // }
+    
     int step = 0;
     int check = 0;
-
-    // Debug
-    printf("Initial centers:\n");
-    for(i=0;i<k;i++){
-        for(j=0;j<dim;j++)
-            printf("%lf,\t", centers[i][j]);
-        printf("\n");
-    }
 
     printf("Loop Start...\n");
     while (!check) {
@@ -178,7 +170,6 @@ int main(int argc, char *argv[]) {
                     dev_new_centers,
                     block_size,
                     grid_size,
-                    b_size,
                     handle,
                     dev_ones,
                     cusparse_handle,
@@ -192,18 +183,20 @@ int main(int argc, char *argv[]) {
         // if (step == 3) break;
     }
 
-    printf("Total num. of steps is %d.\n", step);   
+    printf("Total num. of steps is %d.\n", step);
 
     double time_elapsed = (double)(clock() - start) / CLOCKS_PER_SEC;
+
     printf("Total Time Elapsed: %lf seconds\n", time_elapsed);
+    
+    printf("Time per step is %lf\n", time_elapsed / step);
     
     FILE *f;
     //Store Performance metrics
     //For now just the time elapsed, in the future maybe we'll need memory GPU memory bandwidth etc...
     f = fopen("log.out", "w");
     fprintf(f, "Time Elapsed: %lf ", time_elapsed);
-    fclose(f);
-    
+    fclose(f);    
         
     // print & save results
     
