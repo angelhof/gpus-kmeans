@@ -6,13 +6,6 @@
 #include "kmeans_util.h"
 #include "cublas_v2.h"
 
-/* gpu parameters */
-//#define GRID_SIZE 16
-//#define BLOCK_SIZE 256
-#define DIMENSION 2
-
-double dev_centers[CONSTANT_MEMORY];
-
 #if __CUDA_ARCH__ < 600
 __device__ double doubleAtomicAdd(double* address, double val)
 {
@@ -122,9 +115,9 @@ int main(int argc, char *argv[]) {
     }
 
     // Copy centers to GPU
-    if(cudaMemcpyToSymbol(dev_centers, staging_centers, k*dim*sizeof(double), 0, cudaMemcpyHostToDevice) != cudaSuccess){
-    	printf("Error in copy_to_gpu centers\n");
-    	return -1;
+    if(copy_to_gpu_constant(staging_centers, k*dim*sizeof(double)) != 0) {
+        printf("Error in copy_to_gpu_constant centers\n");
+        return -1;
     }
 
     // FIXME: For now we pass TWO matrices for centers, one normal and 
@@ -187,9 +180,9 @@ int main(int argc, char *argv[]) {
     
     f = fopen("centers.out", "w");
     
-    if(cudaMemcpyFromSymbol(staging_centers, dev_centers, k*dim*sizeof(double), 0, cudaMemcpyDeviceToHost) != cudaSuccess){
-    	printf("Error in copy_from_gpu centers\n");
-    	return -1;
+    if(copy_from_gpu_constant(staging_centers, k*dim*sizeof(double)) != 0) {
+        printf("Error in copy_from_gpu centers\n");
+        return -1;
     }
     
     

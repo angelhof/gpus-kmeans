@@ -11,11 +11,16 @@ CUBLAS_PATH=-L$(CUDA_PREFIX)/lib64
 
 all: kmeans_gpu run
 
+
 kmeans_util.o: kmeans_util.cu
 	$(GPU_COMP) $(CUDA_FLAGS) -c kmeans_util.cu $(GPU_FLAGS)
 
 gpu_util.o: gpu_util.cu
 	$(GPU_COMP) $(CUDA_FLAGS) -c gpu_util.cu $(GPU_FLAGS)
+
+test: gpu_util.o kmeans_gpu_not_atomic.cu 
+	nvcc -O3 -D_FORCE_INLINES kmeans_gpu_not_atomic.cu -c -L/opt/cuda-7.5/lib64 -lcublas
+	nvcc -O3 -D_FORCE_INLINES kmeans_gpu_not_atomic.o gpu_util.o -o kmeans_gpu -L/opt/cuda-7.5/lib64 -lcublas
 
 kmeans_gpu: gpu_util.o kmeans_util.o kmeans_gpu_not_atomic.cu
 	$(GPU_COMP) $(CUDA_FLAGS) -c kmeans_gpu_not_atomic.cu -o kmeans_gpu.o
@@ -28,7 +33,7 @@ check_architectures: check_architecture.cu
 run:
 	# ./kmeans_gpu 256 "../data/road_spatial_network_dataset/spatial_network.data"
 	#./kmeans_gpu 32 "../data/dataset_100_5_2_0"
-	./kmeans_gpu 32 "../data/input.in"
+	./kmeans_gpu 256 ../data/input.in
 	# ./kmeans_gpu < ../data/input.in
 	
 clean:

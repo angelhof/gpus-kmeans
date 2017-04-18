@@ -2,7 +2,8 @@
 #include <stdio.h>
 #include <cuda.h>
 #include "gpu_util.h"
-#include "cublas_v2.h" 
+#include "cublas_v2.h"
+#include "kmeans_util.h"
 
 #define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
 #define MAX(X, Y) (((X) > (Y)) ? (X) : (Y))
@@ -10,8 +11,6 @@
 #ifndef EPS
 #   define EPS 1.e-6
 #endif
-
-extern __constant__ double dev_centers[CONSTANT_MEMORY];
 
 #ifdef DEBUG
 #define DPRINTF(fmt, args...) \
@@ -22,6 +21,10 @@ do { \
 #else   
 #define DPRINTF(fmt, args...) do{}while(0)
 #endif
+
+
+__constant__ double dev_centers[MAX_CONSTANT_MEMORY];
+
 
 __device__ int get_global_tid() {
     return (gridDim.x*blockIdx.y + blockIdx.x)*blockDim.x*blockDim.y +
@@ -43,13 +46,57 @@ __device__
 double squared_distance_on_gpu(const double* ps, const double* center, const int block_size, const int k, const int dim) {
     double sum = 0;
 
-    for (int i = 0, j=0; i < dim*n; i+=block_size,j+=k){
+    for (int i = 0, j=0; i < dim*block_size; i+=block_size,j+=k){
         double temp = center[j] - ps[i];
         // sum = temp * temp + sum as a single operation
         sum = fma(temp, temp, sum);
     }
 
     return sum;
+}
+
+int copy_to_gpu_constant(const double *host, size_t count) {
+    double * temp;
+    cudaError_t err = cudaGetSymbolAddress((void**)&temp, dev_centers);
+    if (err == cudaErrorInvalidValue)
+        printf("Error: cudaErrorInvalidValue\n");
+    else if (err == cudaErrorInvalidSymbol)
+        printf("Error: cudaErrorInvalidSymbol\n");
+    else if (err == cudaErrorDuplicateVariableName)
+        printf("Error: cudaErrorDuplicateVariableName\n");
+    if (copy_to_gpu(host, temp, count) != 0) {
+        return -1;
+    }
+    return 0;
+}
+
+int copy_from_gpu_constant(double *host, size_t count) {
+    double * temp;
+    cudaError_t err = cudaGetSymbolAddress((void**)&temp, dev_centers);
+    if (err == cudaErrorInvalidValue)
+        printf("Error: cudaErrorInvalidValue\n");
+    else if (err == cudaErrorInvalidSymbol)
+        printf("Error: cudaErrorInvalidSymbol\n");
+    else if (err == cudaErrorDuplicateVariableName)
+        printf("Error: cudaErrorDuplicateVariableName\n");
+    if (copy_from_gpu(host, temp, count) != 0) {
+        return -1;
+    }
+    return 0;
+}
+
+int copy_between_gpu_constant(double *host, size_t count) {
+    double * temp;
+    cudaError_t err = cudaGetSymbolAddress((void**)&temp, dev_centers);
+    if (err == cudaErrorInvalidValue)
+        printf("Error: cudaErrorInvalidValue\n");
+    else if (err == cudaErrorInvalidSymbol)
+        printf("Error: cudaErrorInvalidSymbol\n");
+    else if (err == cudaErrorDuplicateVariableName)
+        printf("Error: cudaErrorDuplicateVariableName\n");
+    if (cudaMemcpy((void*) host, temp, count, cudaMemcpyDeviceToDevice) != cudaSuccess)
+        return -1;
+    return 0;
 }
 
 void transpose(double** src, double* dst, int n, int m){
@@ -141,24 +188,31 @@ void find_cluster_on_gpu(const double *dev_points,
     int block_size = blockDim.x;
 
     if (index < n){
-    	for (j = 0; j < dim; ++j){
-    		local_points[thread_id + j*block_size] = dev_points[index + j];
-    	}
+        for (j = 0; j < dim; ++j){
+            local_points[thread_id + j*block_size] = dev_points[index + j];
+            // if (index < k)
+            //     printf("dev_centers[%d][%d] = %lf\n", index, j, dev_centers[j * k + index]);
+        }
 
         min = DBL_MAX;
         for (j = 0; j < k; ++j){
             result_clusters[j*n + index] = 0.0;
             dist = squared_distance_on_gpu(&local_points[thread_id], &dev_centers[j], block_size, k, dim);
-            min = fmin(min, dist);
-            cluster_it_belongs = cluster_it_belongs ^ ((j ^ cluster_it_belongs) & (min == dist));
+            if (min > dist){
+                min = dist;
+                cluster_it_belongs = j;
+            }
         }
         result_clusters[cluster_it_belongs*n + index] = 1.0;
+        for (int j = 0; j < k; j++){
+            printf("result_clusters[%d][%d] = %lf --> line[%d]\n", j, index, result_clusters[j*n + index], index+2);
+        }
     }
 }
 
 __global__
 void update_center_on_gpu(const int k, const int dim, 
-			  double* dev_new_centers,
+              double* dev_new_centers,
                           const double* dev_points_in_cluster){
     int j;
     const int index = get_global_tid();
@@ -166,12 +220,12 @@ void update_center_on_gpu(const int k, const int dim,
     // do all numbers in k*dim threads 
     if (index < k){
         if (dev_points_in_cluster[index] > 0) {
-		printf("Before: Dev_new_centers[%d][%d] = %d\n", index, j, dev_new_centers[j*k+index]);
             #pragma unroll
             for (j = 0; j < dim; j++){
+                printf("Before: Dev_new_centers[%d][%d] = %d\n", index, j, dev_new_centers[j*k+index]);
                 dev_new_centers[j*k + index] /= dev_points_in_cluster[index];
+                printf("After: Dev_new_centers[%d][%d] = %d\n", index, j, dev_new_centers[j*k+index]);
             }
-		printf("After: Dev_new_centers[%d][%d] = %d\n", index, j, dev_new_centers[j*k+index]);
         }
     }
 }
@@ -222,7 +276,7 @@ void kmeans_on_gpu(
     // printf("Grid size : %dx%d\n", gpu_grid.x, gpu_grid.y);
     // printf("Block size: %dx%d\n", gpu_block.x, gpu_block.y);
     // printf("Shared memory size: %ld bytes\n", shmem_size);
-	printf("A\n");
+    printf("A\n");
     // assign points to clusters - step 1
     find_cluster_on_gpu<<<gpu_grid,gpu_block, BLOCK_SIZE*dim*sizeof(double)>>>(
         dev_points,
@@ -239,7 +293,7 @@ void kmeans_on_gpu(
                 &beta,
                 dev_new_centers, k);
     // cudaDeviceSynchronize();
-	printf("C\n");
+    printf("C\n");
     cublasDgemv(handle, CUBLAS_OP_T,
                 n, k,
                 &alpha,
@@ -248,7 +302,7 @@ void kmeans_on_gpu(
                 &beta,
                 dev_points_in_cluster, 1);
     // cudaDeviceSynchronize();
-	printf("D\n");
+    printf("D\n");
     // Update centers based on counted points
     update_center_on_gpu<<<gpu_grid,gpu_block>>>(
         k, dim,
@@ -270,17 +324,16 @@ void kmeans_on_gpu(
     //Now find the norm2 of the new_centers
     // cublasSetPointerMode(handle,CUBLAS_POINTER_MODE_HOST);
     cublasDnrm2(handle, k*dim, dev_centers, 1, &check);
-    // cudaDeviceSynchronize();
     if (!(check > EPS)) icheck = 1;
     copy_to_gpu(&icheck, dev_check, sizeof(int));
     printf("E\n");
     //Update new centers
     // TODO: Swap pointers
-    
-    if(cudaMemcpyToSymbol(dev_centers, dev_new_centers, sizeof(double)*k*dim, 0, cudaMemcpyDeviceToDevice) != cudaSuccess){
-    	printf("Error in copy_from_gpu centers\n");
-    	return -1;
+    cudaDeviceSynchronize();
+    if(copy_between_gpu_constant(dev_new_centers, k * dim * sizeof(double)) != 0){
+        printf("Error in copy_between_gpu_constant centers\n");
     }
+    cudaDeviceSynchronize();
     
-	printf("F\n");
+    printf("F\n");
 }
