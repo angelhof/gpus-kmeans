@@ -19,6 +19,7 @@ Please take over as many tasks as you can
 
 ## Evaluation
 - (Kallas) Find dataset with many dimension 
+- Keep the Final error metric for each implementation, because different ones mean different time to converge
 
 ### Automate evaluation
 - **(OK)** Write a script that executes all implementations for all datasets
