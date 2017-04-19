@@ -288,18 +288,12 @@ void SAKM_perturbation(const double *dev_points, const double *dev_centers,
     const unsigned int start = index;
     const unsigned int end = start + 1;
 
-    // WARNING: Mporei na dhmiourgithei provlhma an ta threads sto block einai ligotera apo to k*dim
-    if(thread_id < k*dim){
-        local_centers[thread_id] = dev_centers[thread_id];
-    }
-    __syncthreads();
-
     if (index < n) {
         for (int i = start; i < end; i++){
             double d_from_current = 0.0;
             //Fetch current cluster
             old_cluster = result_clusters_old[i];
-            d_from_current = squared_distance_on_gpu(&dev_points[i], &local_centers[old_cluster], n, k, dim);
+            d_from_current = squared_distance_on_gpu(&dev_points[i], &dev_centers[old_cluster], n, k, dim);
             
             //Find best candidate
             min = DBL_MAX;
