@@ -11,6 +11,16 @@ void call_create_dev_ones(double* dev_ones, int n, dim3 gpu_grid, dim3 gpu_block
 
 void transpose(double** src, double* dst, int n, int m);
 
+void return_dense_dev_point_to_cluster_map(
+    double* dev_point_to_cluster_map,
+    const int k, 
+    const int n,
+    cusparseHandle_t cusparse_handle,
+    double* dev_ones,
+    int* dev_csrRowPtr_points_clsusters,
+    int* dev_csrColInd_points_clsusters
+    );
+
 int kmeans_on_gpu(
             const double* dev_points,
             double* dev_centers,

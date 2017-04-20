@@ -196,6 +196,34 @@ void create_dev_ones(double* dev_ones, int n) {
     }
 }
 
+void return_dense_dev_point_to_cluster_map(
+    double* dev_point_to_cluster_map,
+    const int k, 
+    const int n,
+    cusparseHandle_t cusparse_handle,
+    double* dev_ones,
+    int* dev_csrRowPtr_points_clsusters,
+    int* dev_csrColInd_points_clsusters
+    )
+{
+    cusparseMatDescr_t descrA;
+    cusparseStatus_t cusparseStatus;
+
+    // Initialization before making the sparse matrix back to dense
+    cusparseStatus = cusparseCreateMatDescr(&descrA);
+    if(cusparseStatus != CUSPARSE_STATUS_SUCCESS)
+        printf("cusparseCreateMatDescr returned error code %d!\n", cusparseStatus);
+    cusparseSetMatIndexBase(descrA,CUSPARSE_INDEX_BASE_ZERO);
+    cusparseDcsr2dense(cusparse_handle, 
+                       k, n, 
+                       descrA, 
+                       dev_ones,
+                       dev_csrRowPtr_points_clsusters,
+                       dev_csrColInd_points_clsusters, 
+                       dev_point_to_cluster_map, 
+                       k);
+    cusparseDestroyMatDescr(descrA);
+}
 // Just a wrapper function of create_dev_ones to avoid putting that
 // function into kmeans_gpu. (create_dev_ones is used in main)
 void call_create_dev_ones(double* dev_ones, int n, dim3 gpu_grid, dim3 gpu_block) {
@@ -316,7 +344,8 @@ int kmeans_on_gpu(
                    dev_new_centers, k);
     // cudaDeviceSynchronize();
 
-    cusparseDestroyMatDescr(descrA);
+    
+
 
     const int size = k * dim;
     // Update centers based on counted points
