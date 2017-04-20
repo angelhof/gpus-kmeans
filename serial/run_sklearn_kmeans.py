@@ -40,6 +40,7 @@ print "Time per step is %lf" % (seconds_elapsed / steps)
 print "Centers:"
 print '\n'.join(' '.join('%f' % x for x in y) for y in kmeans.cluster_centers_)
 
+print "Sum of distances of samples to their closest cluster center: %lf" % (kmeans.inertia_)
 
 # minibatch = MiniBatchKMeans(n_clusters=k, random_state=42, n_init=1).fit(X)
 # print "\nMini-Batch K-Means clustering with K-Means++ initialization:"
