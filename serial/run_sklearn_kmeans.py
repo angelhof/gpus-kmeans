@@ -14,8 +14,9 @@ if(len(sys.argv) == 1):
         x_list.append(np.fromstring(line, dtype=float, sep=' '))
     X = np.array(x_list)
 else:
-    with open(sys.argv[1]) as f:
-        n, k, dim = map(int, f.readline().split())
+    k = int(sys.argv[1])
+    with open(sys.argv[2]) as f:
+        n, _, dim = map(int, f.readline().split())
         X = np.loadtxt(f)
 
 start_time = datetime.now()
@@ -38,7 +39,7 @@ print "Time per step is %lf" % (seconds_elapsed / steps)
 
 print "Centers:"
 print '\n'.join(' '.join('%f' % x for x in y) for y in kmeans.cluster_centers_)
-    
+
 
 # minibatch = MiniBatchKMeans(n_clusters=k, random_state=42, n_init=1).fit(X)
 # print "\nMini-Batch K-Means clustering with K-Means++ initialization:"

@@ -568,7 +568,7 @@ int main(int argc, char *argv[]) {
         printf("\n");
     }
 
-    while (!check) {
+    while (!check && step < 2000) {
         kmeans_on_gpu(
                 dev_points,
                 dev_centers,
@@ -585,15 +585,16 @@ int main(int argc, char *argv[]) {
         // printf("Step %d\n", step);
         
         step += 1;
-        //free new_centers
-        if (step == 1000) break;
-        // delete_points(new_centers);
     }
 
+    printf("Total num. of steps is %d.\n", step);
+
     double time_elapsed = (double)(clock() - start) / CLOCKS_PER_SEC;
+
     printf("Total Time Elapsed: %lf seconds\n", time_elapsed);
-    printf("Total Steps Taken: %d\n", step);
     
+    printf("Time per step is %lf\n", time_elapsed / step);
+
     FILE *f;
     //Store Performance metrics
     //For now just the time elapsed, in the future maybe we'll need memory GPU memory bandwidth etc...

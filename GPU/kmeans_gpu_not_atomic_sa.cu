@@ -15,36 +15,48 @@
 //#define BLOCK_SIZE 256
 
 #define DIMENSION 2
-#define KMEANS
+// #define KMEANS
 #define SA
-#define MINI_BATCHES
+// #define MINI_BATCHES
 
 int main(int argc, char *argv[]) {
     
-    int n, k, i, j;
+    int n, k, old_k, i, j;
     int dim = 2;
     double **points;
     
     int BLOCK_SIZE = 256; //Default
     if (argc > 1) BLOCK_SIZE = atoi(argv[1]);
+    if (argc == 4) k = atoi(argv[2]);
     
     //The second input argument should be the dataset filename
     FILE *in;
-    if (argc > 2) {
+    if (argc == 4) {
+        in = fopen(argv[3], "r");
+    } else if (argc > 2) {
         in = fopen(argv[2], "r");
     } else {
         in = stdin;
     }
     
     //Parse file
-    fscanf(in, "%d %d %d\n", &n ,&k, &dim);
+    register short read_items = -1;
+    read_items = fscanf(in, "%d %d %d\n", &n ,&old_k, &dim);
+    if (read_items != 3){
+        printf("Something went wrong with reading the parameters!\n");
+        return EXIT_FAILURE;
+    }
     points = create_2D_double_array(n, dim);
     for (i =0; i<n; i++) {
         for (j=0; j<dim; j++) {
-            fscanf(in, "%lf", &points[i][j]);
+            read_items = fscanf(in, "%lf", &points[i][j]);
+            if (read_items != 1) {
+                printf("Something went wrong with reading the points!\n");
+            }
         }
     }
     fclose(in);
+    if (argc < 4) k = old_k;
         
     printf("Input Read successfully \n");
     
@@ -164,13 +176,15 @@ int main(int argc, char *argv[]) {
     //Start temp of 100 seems to be working good for the tested datasets
     double start_temp = 100.0;
     double temp = start_temp;
-    int eq_iterations = 100;
+    int eq_iterations = 5000;
     double best_cost = DBL_MAX;
 
 #ifdef SA
     //SA loop
     printf("Starting SA on GPU \n");
     int eq_counter = 0;
+    int same_cost_for_n_iters = 0;
+    double curr_cost = -123;
     while(eq_counter < eq_iterations) {
         
         //printf("SA Temp: %lf \n", temp);
@@ -195,6 +209,8 @@ int main(int argc, char *argv[]) {
                     devStates, 
                     temp);
 
+        step += 1;
+        eq_counter++;
         //Acceptance checks
         if (cost <= best_cost){
             //Accept the solution immediately        
@@ -205,10 +221,9 @@ int main(int argc, char *argv[]) {
             //Storing global best to temp_centers
             cudaMemcpy(dev_temp_centers, dev_new_centers, sizeof(double)*k*dim, cudaMemcpyDeviceToDevice);
             cudaMemcpy(dev_temp_points_clusters, dev_points_clusters, sizeof(double)*k*n, cudaMemcpyDeviceToDevice);
-            
         } else {
             //Accept the solution with probability
-            double accept_factor = 1.0; // The larger the factor the less the probability becomes
+            double accept_factor = 0.5; // The larger the factor the less the probability becomes
             //Increasing the factor is equivalent with decreasing the start_temp
 
             double prob = exp(-accept_factor*(cost - best_cost)/start_temp);
@@ -219,13 +234,22 @@ int main(int argc, char *argv[]) {
                 cudaMemcpy(dev_centers, dev_new_centers, sizeof(double)*k*dim, cudaMemcpyDeviceToDevice);
             }
         }
-        step += 1;
-        eq_counter++;
+        if (curr_cost == best_cost) {
+            same_cost_for_n_iters ++;            
+        }
+        else {
+            same_cost_for_n_iters = 1;
+            curr_cost = best_cost;
+        }
+        // Just to make it stop ealrier because it doesn't change that often
+        if (same_cost_for_n_iters == 200) {
+            break;
+        }
     }
     //Storing global best to temp_centers
     cudaMemcpy(dev_centers, dev_temp_centers, sizeof(double)*k*dim, cudaMemcpyDeviceToDevice);
     cudaMemcpy(dev_points_clusters, dev_temp_points_clusters, sizeof(double)*k*n, cudaMemcpyDeviceToDevice);
-    printf("SA Steps %d \n", step);
+    // printf("SA Steps %d \n", step);
 #endif
 
     /*
@@ -262,17 +286,22 @@ int main(int argc, char *argv[]) {
 
 
     //Post Processing
-    double eval = evaluate_solution(dev_points, dev_centers, dev_points_clusters, 
-                  dev_centers_of_points, dev_points_help, 
-                  n, k, dim, 
-                  gpu_grid, gpu_block, 
-                  handle, stat);
+    // double eval = evaluate_solution(dev_points, dev_centers, dev_points_clusters, 
+    //               dev_centers_of_points, dev_points_help, 
+    //               n, k, dim, 
+    //               gpu_grid, gpu_block, 
+    //               handle, stat);
 
-    printf("Final Solution Value: %lf \n", eval);
+    // printf("Final Solution Value: %lf \n", eval);
+
+    printf("Total num. of steps is %d.\n", step);
 
     double time_elapsed = (double)(clock() - start) / CLOCKS_PER_SEC;
+
     printf("Total Time Elapsed: %lf seconds\n", time_elapsed);
     
+    printf("Time per step is %lf\n", time_elapsed / step);
+
     FILE *f;
     //Store Performance metrics
     //For now just the time elapsed, in the future maybe we'll need memory GPU memory bandwidth etc...

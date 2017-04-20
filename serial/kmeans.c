@@ -152,20 +152,21 @@ double* update_center(double** ps, char* cluster, int n, int dim) {
 
 int main(int argc, char *argv[]) {
     // read input
-    int n, k, i, j;
+    int n, k, old_k, i, j;
     int dim = 3;
     double **points;
 
+    k = atoi(argv[1]);
     //The first input argument should be the dataset filename
     FILE *in;
-    if (argc > 1) {
-        in = fopen(argv[1], "r");
+    if (argc > 2) {
+        in = fopen(argv[2], "r");
     } else {
         in = stdin;
     }
     //Parse file
     register short read_items = -1;
-    read_items = fscanf(in, "%d %d %d\n", &n ,&k, &dim);
+    read_items = fscanf(in, "%d %d %d\n", &n ,&old_k, &dim);
     if (read_items != 3){
         printf("Something went wrong with reading the parameters!\n");
         return EXIT_FAILURE;
@@ -188,13 +189,13 @@ int main(int argc, char *argv[]) {
     centers = init_centers_kpp(points, n, k, dim);
     printf("Initializing Centers done\n");
 
-    printf("Initial centers:\n");
     // Debug
-    for(i=0;i<k;i++){
-        for(j=0;j<dim;j++)
-            printf("%lf,\t", centers[i][j]);
-        printf("\n");
-    }
+    // printf("Initial centers:\n");
+    // for(i=0;i<k;i++){
+    //     for(j=0;j<dim;j++)
+    //         printf("%lf,\t", centers[i][j]);
+    //     printf("\n");
+    // }
 
     // start algorithm
     double check = 1;
@@ -242,8 +243,11 @@ int main(int argc, char *argv[]) {
     printf("Total num. of steps is %d.\n", step);
 
     double time_elapsed = (double)(clock() - start) / CLOCKS_PER_SEC;
-    printf("Total Time Elapsed: %lf seconds\n", time_elapsed);
 
+    printf("Total Time Elapsed: %lf seconds\n", time_elapsed);
+    
+    printf("Time per step is %lf\n", time_elapsed / step);
+ 
     // print results
     printf("Centers:\n");
     for (i = 0; i < k; i++) {

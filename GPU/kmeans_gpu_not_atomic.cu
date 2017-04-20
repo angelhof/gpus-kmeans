@@ -32,16 +32,19 @@ __device__ double doubleAtomicAdd(double* address, double val)
 
 int main(int argc, char *argv[]) {
     
-    int n, k, i, j;
+    int n, k, old_k, i, j;
     int dim = 2;
     double **points;
     
     int BLOCK_SIZE = 256; //Default
     if (argc > 1) BLOCK_SIZE = atoi(argv[1]);
+    if (argc == 4) k = atoi(argv[2]);
     
     //The second input argument should be the dataset filename
     FILE *in;
-    if (argc > 2) {
+    if (argc == 4) {
+        in = fopen(argv[3], "r");
+    } else if (argc > 2) {
         in = fopen(argv[2], "r");
     } else {
         in = stdin;
@@ -49,7 +52,7 @@ int main(int argc, char *argv[]) {
 
     //Parse file
     register short read_items = -1;
-    read_items = fscanf(in, "%d %d %d\n", &n ,&k, &dim);
+    read_items = fscanf(in, "%d %d %d\n", &n ,&old_k, &dim);
     if (read_items != 3){
         printf("Something went wrong with reading the parameters!\n");
         return EXIT_FAILURE;
@@ -64,7 +67,8 @@ int main(int argc, char *argv[]) {
         }
     }
     fclose(in);
-        
+    if (argc < 4) k = old_k;
+
     printf("Input Read successfully \n");
     
     //Create CUBLAS Handles
@@ -136,15 +140,15 @@ int main(int argc, char *argv[]) {
     int* dev_check = (int *) gpu_alloc(sizeof(int));
 
     // Debug
-    printf("Initial centers:\n");
-    for(i=0;i<k;i++){
-        for(j=0;j<dim;j++)
-            printf("%lf,\t", centers[i][j]);
-        printf("\n");
-    }
+    // printf("Initial centers:\n");
+    // for(i=0;i<k;i++){
+    //     for(j=0;j<dim;j++)
+    //         printf("%lf,\t", centers[i][j]);
+    //     printf("\n");
+    // }
 
     printf("Loop Start...\n");
-    while (!check) {
+    while (!check && step < 5000) {
         kmeans_on_gpu(
                     dev_points,
                     dev_centers,
@@ -159,17 +163,16 @@ int main(int argc, char *argv[]) {
         
         copy_from_gpu(&check, dev_check, sizeof(int));
         
-        // printf("Step %d Check: %d \n", step, check);
-        //if (check < EPS) break;
-        
         step += 1;
-        // if (step == 3) break;
     }
 
     printf("Total num. of steps is %d.\n", step);
 
     double time_elapsed = (double)(clock() - start) / CLOCKS_PER_SEC;
+
     printf("Total Time Elapsed: %lf seconds\n", time_elapsed);
+    
+    printf("Time per step is %lf\n", time_elapsed / step);
     
     FILE *f;
     //Store Performance metrics

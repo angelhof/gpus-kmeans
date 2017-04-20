@@ -30,7 +30,7 @@ __device__ double doubleAtomicAdd(double* address, double val)
 
 int main(int argc, char *argv[]) {
     
-    int n, k, i, j;
+    int n, k, old_k, i, j;
     int dim = 2;
     double **points;
     
@@ -38,17 +38,20 @@ int main(int argc, char *argv[]) {
     int grid_size = 1024;
     if (argc > 1) block_size = atoi(argv[1]);
     if (argc > 2) grid_size = atoi(argv[2]);
+    if (argc == 5) k = atoi(argv[3]);
     
     //The second input argument should be the dataset filename
     FILE *in;
-    if (argc > 3) {
+    if (argc == 5) {
+        in = fopen(argv[4], "r");
+    } else if (argc > 3) {
         in = fopen(argv[3], "r");
     } else {
         in = stdin;
     }
     //Parse file
     register short read_items = -1;
-    read_items = fscanf(in, "%d %d %d\n", &n ,&k, &dim);
+    read_items = fscanf(in, "%d %d %d\n", &n ,&old_k, &dim);
     if (read_items != 3){
         printf("Something went wrong with reading the parameters!\n");
         return EXIT_FAILURE;
@@ -63,7 +66,8 @@ int main(int argc, char *argv[]) {
         }
     }
     fclose(in);
-        
+    if (argc < 5) k = old_k;
+
     printf("Input Read successfully \n");
     
     //Create CUBLAS Handles
@@ -161,7 +165,7 @@ int main(int argc, char *argv[]) {
     int check = 0;
 
     printf("Loop Start...\n");
-    while (!check) {
+    while (!check && step < 5000) {
         check = kmeans_on_gpu(
                     dev_points,
                     dev_centers,

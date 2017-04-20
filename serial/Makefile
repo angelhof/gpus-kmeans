@@ -10,7 +10,7 @@ ready_parallel: kmeans_ready_to_parallel.c
 	$(CXX) $(CFLAGS) kmeans_ready_to_parallel.c -o kmeans
 
 run:
-	./kmeans < ../data/input.in
+	./kmeans 3 < ../data/input.in
 
 clean:
 	rm kmeans
