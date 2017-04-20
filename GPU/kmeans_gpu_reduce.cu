@@ -10,17 +10,10 @@
 #define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
 #define MAX(X, Y) (((X) > (Y)) ? (X) : (Y))
 
-#ifndef EPS
-#   define EPS 1.e-6
-#endif
 
-/* gpu parameters */
-//#define GRID_SIZE 16
-//#define BLOCK_SIZE 256
-#define DIMENSION 4
+#define EPS 1.e-6
+#define BLOCK_SIZE 256
 
-
-// #define DEBUG
 
 #ifdef DEBUG
 #define DPRINTF(fmt, args...) \
@@ -187,35 +180,9 @@ void find_cluster_on_gpu(double *dev_points, double *dev_centers, int n, int k, 
                 }
             }
             result_clusters[i] = cluster_it_belongs;
-            // printf("points_clusters[%d] = %d\n", i, cluster_it_belongs);
         }
     }
 }
-
-// this function is not used
-__global__
-void count_points_in_clusters_on_gpu(double* dev_points,       // Device point data 
-                                     int* dev_points_clusters, // Device point -> cluster
-                                     int n, int k, int dim,  
-                                     double* dev_centers,      // Device center data    
-                                     int* dev_points_in_cluster) {
-    int i, j;
-    
-    int index = get_global_tid();
-
-    int start = index;
-    int end = start + 1;
-
-    if (index < n){
-        for (i = start; i < end; i++) {
-            atomicAdd(&dev_points_in_cluster[dev_points_clusters[i]], 1);
-            for (j = 0; j < dim; j++) {
-                doubleAtomicAdd(&(dev_centers[dev_points_clusters[i]*dim + j]), dev_points[i*dim + j]);
-            }
-        }
-    }
-}
-
 
 __device__
 void vectorAddInt(int *dest, int *add, int size) {
@@ -343,29 +310,18 @@ void update_center_on_gpu(int n, int k, int dim,
                 for (j = 0; j < dim; j++){
                     dev_centers[i*dim + j] /= dev_points_in_cluster[i];
                 }
-                // printf("Points in cluster: %d, %d\n", index, dev_points_in_cluster[i]);
             }
         }
     }
 }
 
-__device__
-void is_converged(double* dev_new_centers, 
-                  double* dev_centers, 
-                  int* check, 
-                  double eps, int index, int dim){
-    double diff = sqrt(squared_distance_on_gpu(&dev_new_centers[index], &dev_centers[index], dim));
-    if (diff > eps) {
-        *check = 0;
-    }
-}
 
 __global__
 void check_convergence(double* dev_centers,
                        double* dev_new_centers,
                        int n, int k, int dim,
-                       int* dev_check,
-                       double eps){
+                       int* dev_check) {
+
     int index = get_global_tid();
     if (index < k) {
         *dev_check = 1;
@@ -373,7 +329,7 @@ void check_convergence(double* dev_centers,
                                               &dev_centers[index*dim], 
                                               dim);
         // printf("Diff[%d]: %lf\n", index, diff);            
-        if (diff > eps) {            
+        if (diff > EPS) {            
             *dev_check = 0;          
         }
 
@@ -411,11 +367,7 @@ void kmeans_on_gpu(
             int* dev_points_clusters,
             int* dev_points_in_cluster,
             double* dev_new_centers,
-            int* dev_check,
-            int BLOCK_SIZE) {
-
-    
-    double eps = 1.0E-4;
+            int* dev_check) {
 
 
     // Calculate grid and block sizes
@@ -473,25 +425,19 @@ void kmeans_on_gpu(
         dev_centers,
         dev_new_centers,
         n, k, dim,
-        dev_check,
-        eps);
+        dev_check);
     cudaDeviceSynchronize();
         
 }
 
 int main(int argc, char *argv[]) {
     
-    int n, k, i, j;
-    int dim = 2;
+    int n, k, dim, i, j;
     double **points;
     
-    int BLOCK_SIZE = 256; //Default
-    if (argc > 1) BLOCK_SIZE = atoi(argv[1]);
-    
-    //The second input argument should be the dataset filename
     FILE *in;
-    if (argc > 2) {
-        in = fopen(argv[2], "r");
+    if (argc > 1) {
+        in = fopen(argv[1], "r");
     } else {
         in = stdin;
     }
@@ -576,8 +522,7 @@ int main(int argc, char *argv[]) {
                 dev_points_clusters,
                 dev_points_in_cluster,
                 dev_new_centers,
-                dev_check,
-                BLOCK_SIZE);
+                dev_check);
         
 
         copy_from_gpu(&check, dev_check, sizeof(int));

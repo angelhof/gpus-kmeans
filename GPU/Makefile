@@ -29,9 +29,10 @@ kmeans_cublas_sa: gpu_util.o kmeans_util_sa.o kmeans_gpu_not_atomic_sa.cu
 	$(GPU_COMP) $(CUDA_FLAGS) -c kmeans_gpu_not_atomic_sa.cu -o kmeans_cublas_sa.o
 	$(GPU_COMP) $(CUDA_FLAGS) kmeans_cublas_sa.o gpu_util.o kmeans_util_sa.o -o kmeans_cublas_sa $(CUBLAS_PATH) $(CUBLAS)
 
-kmeans_reduce: gpu_util.o kmeans_gpu_reduce.cu
+kmeans_reduce: kmeans_gpu_reduce.cu gpu_util.o
 	$(GPU_COMP) $(CUDA_FLAGS) -c kmeans_gpu_reduce.cu -o kmeans_reduce.o
-	$(GPU_COMP) $(CUDA_FLAGS) kmeans_reduce.o gpu_util.o -o kmeans_reduce $(CUBLAS_PATH) $(CUBLAS)
+	$(GPU_COMP) $(CUDA_FLAGS) kmeans_reduce.o gpu_util.o -o kmeans_reduce
+# usage : ./kmeans_gpu_reduce [filename]
 
 kmeans_util_cusparse.o: kmeans_util_cusparse.cu
 	$(GPU_COMP) $(CUDA_FLAGS) $(CUSPARSE) -c kmeans_util_cusparse.cu $(GPU_FLAGS)
@@ -47,7 +48,7 @@ check_architectures: check_architecture.cu
 test_run:
 	./kmeans_cublas 128 ../data/input.in
 	./kmeans_cublas_sa 128 ../data/input.in
-	./kmeans_reduce 128 ../data/input.in
+	./kmeans_reduce ../data/input.in
 	./kmeans_cusparse 128 2 ../data/input.in
 	# ./kmeans_gpu 256 "../data/road_spatial_network_dataset/spatial_network.data"
 	#./kmeans_gpu 32 "../data/dataset_100_5_2_0"
