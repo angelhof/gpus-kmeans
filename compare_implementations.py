@@ -66,7 +66,7 @@ for (impl, name) in implementations:
 # Run all implementations
 for (impl, name) in implementations:
     for ds in datasets:
-        for k in k_values[ds.lstrip("data/")]:
+        for k in k_values[ds[5:]]:
             print " -- Executing: " + name + " - " + ds + " - k = " + k
             times = []
             all_iters = []
