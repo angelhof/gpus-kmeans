@@ -40,7 +40,7 @@ datasets = map(lambda x: data_dir + x, datasets)
 # Implementations
 implementations = [
     ("./serial/run_sklearn_kmeans.py", "scikit_kmeans"),
-    ("./serial/kmeans", "serial"),
+    # ("./serial/kmeans", "serial"),
     ("./GPU/kmeans_cublas", "cublas"),
     ("./GPU/kmeans_cublas_sa", "cublas_simulated_annealing"),
     # ("./GPU/kmeans_reduce", "reduce"),  # Something wrong here
@@ -101,44 +101,56 @@ for (impl, name) in implementations:
                     else:
                         ps = [impl, "128", "1024", k, ds]
 
-                proc = subprocess.Popen(
-                    ps, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                (out, err) = proc.communicate()
-                output_lines = out.rstrip().split("\n")
+                try:
+                    proc = subprocess.Popen(
+                        ps, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    (out, err) = proc.communicate()
+                    output_lines = out.rstrip().split("\n")
 
-                # Gather results
-                raw_iters = find(lambda x: x.startswith(
-                    "Total num. of steps is"), output_lines)
-                iters = int(raw_iters[:-1].split()[-1])
+                    # Gather results
+                    raw_iters = find(lambda x: x.startswith(
+                        "Total num. of steps is"), output_lines)
+                    iters = int(raw_iters[:-1].split()[-1])
 
-                raw_time = find(lambda x: x.startswith(
-                    "Total Time Elapsed:"), output_lines)
-                real_time = float(raw_time.split()[-2])
+                    raw_time = find(lambda x: x.startswith(
+                        "Total Time Elapsed:"), output_lines)
+                    real_time = float(raw_time.split()[-2])
 
-                raw_time_per_step = find(lambda x: x.startswith(
-                    "Time per step is"), output_lines)
-                real_time_per_step = float(raw_time_per_step.split()[-1])
+                    raw_time_per_step = find(lambda x: x.startswith(
+                        "Time per step is"), output_lines)
+                    real_time_per_step = float(raw_time_per_step.split()[-1])
 
-                raw_inertia = find(lambda x: x.startswith(
-                    "Sum of distances of samples to their closest cluster center:"), output_lines)
-                real_inertia = float(raw_inertia.split()[-1])
+                    raw_inertia = find(lambda x: x.startswith(
+                        "Sum of distances of samples to their closest cluster center:"), output_lines)
+                    real_inertia = float(raw_inertia.split()[-1])
 
-                all_iters.append(iters)
-                times.append(real_time)
-                times_per_iter.append(real_time_per_step)
-                inertias.append(real_inertia)
+                    all_iters.append(iters)
+                    times.append(real_time)
+                    times_per_iter.append(real_time_per_step)
+                    inertias.append(real_inertia)
+                except KeyboardInterrupt:
+                    print "\nExiting..."
+                    exit(1)
+                except:
+                    print "\rUnexpected error:", sys.exc_info()[0]
 
             # TODO: Also gather centers
             centers = []
 
-            avg_time = float(sum(times)) / len(times)
-            avg_iters = float(sum(all_iters)) / len(all_iters)
-            avg_time_per_iter = float(
-                sum(times_per_iter)) / len(times_per_iter)
-            avg_inertia = float(sum(inertias)) / len(inertias)
-            record[name].append(Result(ds, centers, k, avg_time,
-                                       avg_iters, avg_time_per_iter, 
-                                       avg_inertia))
+            try:
+                avg_time = float(sum(times)) / len(times)
+                avg_iters = float(sum(all_iters)) / len(all_iters)
+                avg_time_per_iter = float(
+                    sum(times_per_iter)) / len(times_per_iter)
+                avg_inertia = float(sum(inertias)) / len(inertias)
+                record[name].append(Result(ds, centers, k, avg_time,
+                                           avg_iters, avg_time_per_iter, 
+                                           avg_inertia))
+            except KeyboardInterrupt:
+                    print "\nExiting..."
+                    exit(1)
+            except:
+                print "\rUnexpected error:", sys.exc_info()[0]
             sys.stdout.write('\r')
             sys.stdout.flush()
 
