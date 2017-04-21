@@ -240,6 +240,20 @@ int main(int argc, char *argv[]) {
         // if (step == 3) break;    
     }
 
+    double inertia = 0;
+    for (j = 0; j < k; j++) {
+    	for (i = 0; i < n; i++) {
+	        if (clusters[j][i]) {
+	        	double dist2 = 0;
+	            for (int d = 0; d < dim; d++) {
+	            	dist2 += (centers[j][d] - points[i][d])*(centers[j][d] - points[i][d]);
+	            }
+	            inertia += sqrt(dist2);
+	        }
+	    }
+	}
+	printf("Sum of distances of samples to their closest cluster center: %lf\n", inertia);
+
     printf("Total num. of steps is %d.\n", step);
 
     double time_elapsed = (double)(clock() - start) / CLOCKS_PER_SEC;
