@@ -26,11 +26,11 @@ number_of_runs = 5
 # Hardcoded datasets relative to data_dir
 data_dir = "data/"
 datasets = [
-    "iris_dataset/iris.data",
-    "elki_sample_dataset/dataset_elki_150.in",
-    "elki_sample_dataset/dataset_elki_500.in",
+    # "iris_dataset/iris.data",
+    # "elki_sample_dataset/dataset_elki_150.in",
+    # "elki_sample_dataset/dataset_elki_500.in",
     "road_spatial_network_dataset/spatial_network.data",
-    "nu_minebench_dataset/kmeans/color.data",
+    # "nu_minebench_dataset/kmeans/color.data",
     "nu_minebench_dataset/kmeans/edge.data",
     "daily_sports_activities/data.data"
 ]
@@ -39,12 +39,12 @@ datasets = map(lambda x: data_dir + x, datasets)
 
 # Implementations
 implementations = [
-    # ("./serial/run_sklearn_kmeans.py", "scikit_kmeans"),
+    ("./serial/run_sklearn_kmeans.py", "scikit_kmeans"),
     # ("./serial/kmeans", "serial"),
-    ("./GPU/kmeans_cublas", "cublas"),
-    ("./GPU/kmeans_cublas_sa", "cublas_simulated_annealing"),
+    # ("./GPU/kmeans_cublas", "cublas"),
+    # ("./GPU/kmeans_cublas_sa", "cublas_simulated_annealing"),
     # ("./GPU/kmeans_reduce", "reduce"),  # Something wrong here
-    ("./GPU/kmeans_cusparse", "cusparse")
+    # ("./GPU/kmeans_cusparse", "cusparse")
 ]
 
 # Different values for k
