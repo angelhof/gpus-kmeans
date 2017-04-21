@@ -3,13 +3,14 @@ import sys
 
 
 class Result():
-    def __init__(self, dataset_name, centers, k, time, iters, time_per_iter):
+    def __init__(self, dataset_name, centers, k, time, iters, time_per_iter, inertia):
         self.ds_name = dataset_name
         self.centers = centers
         self.k = k
         self.time = time
         self.iters = iters
         self.time_per_iter = time_per_iter
+        self.inertia = inertia
 
 
 def find(func, list):
@@ -71,6 +72,7 @@ for (impl, name) in implementations:
             times = []
             all_iters = []
             times_per_iter = []
+            inertias = []
             for run_number in xrange(1, number_of_runs + 1):
                 # Print run information
                 sys.stdout.write('\r      Run: ' +
@@ -117,9 +119,14 @@ for (impl, name) in implementations:
                     "Time per step is"), output_lines)
                 real_time_per_step = float(raw_time_per_step.split()[-1])
 
+                raw_inertia = find(lambda x: x.startswith(
+                    "Sum of distances of samples to their closest cluster center:"), output_lines)
+                real_inertia = float(raw_inertia.split()[-1])
+
                 all_iters.append(iters)
                 times.append(real_time)
                 times_per_iter.append(real_time_per_step)
+                inertias.append(real_inertia)
 
             # TODO: Also gather centers
             centers = []
@@ -128,8 +135,10 @@ for (impl, name) in implementations:
             avg_iters = float(sum(all_iters)) / len(all_iters)
             avg_time_per_iter = float(
                 sum(times_per_iter)) / len(times_per_iter)
+            avg_inertia = float(sum(inertias)) / len(inertias)
             record[name].append(Result(ds, centers, k, avg_time,
-                                       avg_iters, avg_time_per_iter))
+                                       avg_iters, avg_time_per_iter, 
+                                       avg_inertia))
             sys.stdout.write('\r')
             sys.stdout.flush()
 
@@ -139,9 +148,10 @@ fout = open("results.out", "w")
 print " ---- RESULTS ----"
 for (impl, name) in implementations:
     for res in record[name]:
-        out_str = "{}, {}, k = {}, {:0.8f} sec, {} iters, {:0.8f} sec/iter"
+        out_str = "{}, {}, k = {}, {:0.8f} sec, {} iters, {:0.8f} sec/iter, {} Inertia"
         out_str = out_str.format(name, res.ds_name, res.k,
-                                 res.time, int(res.iters), res.time_per_iter)
+                                 res.time, int(res.iters), res.time_per_iter,
+                                 res.inertia)
         print out_str
         out_str += "\n"
         fout.write(out_str)
