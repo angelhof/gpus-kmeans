@@ -114,6 +114,9 @@ int main(int argc, char *argv[]) {
     
     printf("GPU allocs done \n");
     
+    // Matrix that will contain the final points_to_cluster_map_on_host
+    double *host_points_to_cluster_map = (double*) calloc(k*n, sizeof(double));
+
     call_create_dev_ones(dev_ones, n, gpu_grid, gpu_block);
 
     // Transpose points and centers for cublas
@@ -174,6 +177,37 @@ int main(int argc, char *argv[]) {
     
     printf("Time per step is %lf\n", time_elapsed / step);
     
+
+    // We keep the map of points to clusters in order to compute the final inertia   
+    copy_from_gpu(staging_centers, dev_centers, k*dim*sizeof(double));
+    copy_from_gpu(host_points_to_cluster_map, dev_points_clusters, k*n*sizeof(double));
+
+    // Compute the final inertia
+    double inertia = 0;
+    int curr_cluster = 0;
+    // i in points
+    for(i=0;i<n;i++){
+        
+    // Find point cluster index
+    curr_cluster = -1;
+        for(j=0;j<k;j++){
+            //if(host_points_to_cluster_map[i*k+j] == 1.0){
+            if(host_points_to_cluster_map[j*n+i] == 1.0){
+            curr_cluster = j;
+        break;
+        }
+    }
+
+    // Compute distance of point from specific cluster
+    double curr_dist = 0;
+    for(j=0;j<dim;j++){
+        curr_dist += pow(staging_centers[j*k + curr_cluster] - staging_points[j*n + i], 2);  
+    }
+    inertia += sqrt(curr_dist);
+    }
+    printf("Sum of distances of samples to their closest cluster center: %lf\n", inertia);
+
+
     FILE *f;
     //Store Performance metrics
     //For now just the time elapsed, in the future maybe we'll need memory GPU memory bandwidth etc...
@@ -186,7 +220,6 @@ int main(int argc, char *argv[]) {
     
     f = fopen("centers.out", "w");
     
-    copy_from_gpu(staging_centers, dev_centers, k*dim*sizeof(double));
     printf("Centers:\n");
     for (i = 0; i < k; i++) {
         for (j = 0; j < dim; j++){

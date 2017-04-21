@@ -213,16 +213,18 @@ int main(int argc, char *argv[]) {
         );
 
     // We keep the map of points to clusters in order to compute the final inertia  
-    copy_from_gpu(host_points_to_cluster_map, dev_point_to_cluster_map, k*n*sizeof(double));
     copy_from_gpu(staging_centers, dev_centers, k*dim*sizeof(double));
+    copy_from_gpu(host_points_to_cluster_map, dev_point_to_cluster_map, k*n*sizeof(double));
 
     // Debug purposes
+    /*
     for(j=0; j<n; j++){
     	for(i=0; i<k; i++){
             printf("%lf ", host_points_to_cluster_map[j*k+i]);
         }
         printf("\n");
     } 
+    */
 
     // Compute the final inertia
     double inertia = 0;
@@ -234,7 +236,7 @@ int main(int argc, char *argv[]) {
 	curr_cluster = -1;
         for(j=0;j<k;j++){
      	    if(host_points_to_cluster_map[i*k+j] == 1.0){
-	        curr_cluster = i;
+	        curr_cluster = j;
 		break;
 	    }
 	}
