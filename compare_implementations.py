@@ -39,12 +39,12 @@ datasets = map(lambda x: data_dir + x, datasets)
 
 # Implementations
 implementations = [
-    ("./serial/run_sklearn_kmeans.py", "scikit_kmeans"),
+    # ("./serial/run_sklearn_kmeans.py", "scikit_kmeans"),
     # ("./serial/kmeans", "serial"),
-    # ("./GPU/kmeans_cublas", "cublas"),
-    # ("./GPU/kmeans_cublas_sa", "cublas_simulated_annealing"),
+    ("./GPU/kmeans_cublas", "cublas"),
+    ("./GPU/kmeans_cublas_sa", "cublas_simulated_annealing"),
     # ("./GPU/kmeans_reduce", "reduce"),  # Something wrong here
-    # ("./GPU/kmeans_cusparse", "cusparse")
+    ("./GPU/kmeans_cusparse", "cusparse")
 ]
 
 # Different values for k
