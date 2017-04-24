@@ -50,8 +50,10 @@ def plot_one(output_name, dataset, files, x_labels):
 	ax.set_title('Time of execution for dataset x')
 	ax.set_xticks(ind + width / 2)
 	ax.set_xticklabels(x_labels)
+	ax.set_xlabel('#K - Number of clusters')
 	# ax.set_yticks(np.arange(0, max_value * 1.1, max_value/n_y_ticks))
 	ax.set_yscale('log')
+
 
 	ax.legend((rects1[0], rects2[0], rects3[0]), ('serial', 'cuBlas', 'cuSparse'))
 	ax.grid(True)
@@ -62,12 +64,12 @@ def plot_one(output_name, dataset, files, x_labels):
 output_name = "road_dataset.png"
 dataset = 'data/road_spatial_network_dataset/spatial_network.data'
 files = ["titan_x_final.txt"] * 2 + ["scikit_final.out"]
-x_labels = map(str, range(5,45,5) + [55])
+x_labels = map(str, range(5,46,5) + [55])
 plot_one(output_name, dataset, files, x_labels)
 
 output_name = "nu_minebench.png"
 dataset = 'data/nu_minebench_dataset/kmeans/edge.data'
 files = ["titan_x_final.txt"] * 2 + ["scikit_final.out"]
-x_labels = map(str, range(50,400,50) + [500, 600])
+x_labels = map(str, range(50,401,50) + [500, 600])
 plot_one(output_name, dataset, files, x_labels)
 
