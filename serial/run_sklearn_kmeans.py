@@ -21,8 +21,12 @@ else:
 
 start_time = datetime.now()
 
-kmeans = KMeans(n_clusters=k, random_state=42, n_init=1, tol=1e-7,
-                max_iter=10000, precompute_distances=False).fit(X)
+kmeans = KMeans(n_clusters=k,  
+                n_init=1, 
+                # init='random',
+                precompute_distances=False,
+                tol=1e-9,
+                max_iter=10000).fit(X)
 
 end_time = datetime.now()
 # print "Simple K-Means clustering with K-Means++ initialization:"

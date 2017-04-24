@@ -1,0 +1,65 @@
+ ---- RESULTS ----
+cublas, data/road_spatial_network_dataset/spatial_network.data, k = 5, 1.02734820 sec, 89 iters, 0.01149620 sec/iter, 1573892.29071 Inertia
+cublas, data/road_spatial_network_dataset/spatial_network.data, k = 10, 5.22676720 sec, 474 iters, 0.01100860 sec/iter, 889662.734421 Inertia
+cublas, data/road_spatial_network_dataset/spatial_network.data, k = 15, 8.09472740 sec, 709 iters, 0.01141740 sec/iter, 636306.645717 Inertia
+cublas, data/road_spatial_network_dataset/spatial_network.data, k = 20, 11.06270960 sec, 910 iters, 0.01215040 sec/iter, 524771.990125 Inertia
+cublas, data/road_spatial_network_dataset/spatial_network.data, k = 25, 9.74319780 sec, 808 iters, 0.01205460 sec/iter, 462717.234714 Inertia
+cublas, data/road_spatial_network_dataset/spatial_network.data, k = 30, 16.68963900 sec, 1363 iters, 0.01223060 sec/iter, 413794.662586 Inertia
+cublas, data/road_spatial_network_dataset/spatial_network.data, k = 35, 23.91183540 sec, 1983 iters, 0.01205400 sec/iter, 381595.660156 Inertia
+cublas, data/road_spatial_network_dataset/spatial_network.data, k = 40, 16.14841860 sec, 1295 iters, 0.01246200 sec/iter, 361538.124631 Inertia
+cublas, data/road_spatial_network_dataset/spatial_network.data, k = 45, 25.99691020 sec, 2015 iters, 0.01288940 sec/iter, 341111.069376 Inertia
+cublas, data/road_spatial_network_dataset/spatial_network.data, k = 55, 21.97474540 sec, 1618 iters, 0.01356760 sec/iter, 317879.623089 Inertia
+cublas, data/nu_minebench_dataset/kmeans/edge.data, k = 50, 0.23733180 sec, 158 iters, 0.00150280 sec/iter, 38154.0719954 Inertia
+cublas, data/nu_minebench_dataset/kmeans/edge.data, k = 100, 0.32261780 sec, 135 iters, 0.00240760 sec/iter, 35181.7578162 Inertia
+cublas, data/nu_minebench_dataset/kmeans/edge.data, k = 150, 0.38759380 sec, 126 iters, 0.00309540 sec/iter, 33428.8291344 Inertia
+cublas, data/nu_minebench_dataset/kmeans/edge.data, k = 200, 0.42197740 sec, 93 iters, 0.00455860 sec/iter, 32228.8382642 Inertia
+cublas, data/nu_minebench_dataset/kmeans/edge.data, k = 250, 0.42734500 sec, 80 iters, 0.00534780 sec/iter, 31413.5622558 Inertia
+cublas, data/nu_minebench_dataset/kmeans/edge.data, k = 300, 0.56666820 sec, 100 iters, 0.00568180 sec/iter, 30614.694796 Inertia
+cublas, data/nu_minebench_dataset/kmeans/edge.data, k = 350, 0.48255840 sec, 71 iters, 0.00680140 sec/iter, 30015.9071876 Inertia
+cublas, data/nu_minebench_dataset/kmeans/edge.data, k = 400, 0.58756560 sec, 75 iters, 0.00787040 sec/iter, 29452.5126078 Inertia
+cublas, data/nu_minebench_dataset/kmeans/edge.data, k = 500, 0.65818620 sec, 71 iters, 0.00934020 sec/iter, 28564.9856542 Inertia
+cublas, data/nu_minebench_dataset/kmeans/edge.data, k = 600, 0.70210320 sec, 59 iters, 0.01187620 sec/iter, 27793.8906006 Inertia
+
+
+cublas_simulated_annealing, data/road_spatial_network_dataset/spatial_network.data, k = 5, 3.76769860 sec, 237 iters, 0.01585060 sec/iter, 1584169.038 Inertia
+cublas_simulated_annealing, data/road_spatial_network_dataset/spatial_network.data, k = 10, 4.31578760 sec, 254 iters, 0.01700080 sec/iter, 955775.864975 Inertia
+cublas_simulated_annealing, data/road_spatial_network_dataset/spatial_network.data, k = 15, 4.03340240 sec, 222 iters, 0.01815520 sec/iter, 749951.752824 Inertia
+cublas_simulated_annealing, data/road_spatial_network_dataset/spatial_network.data, k = 20, 4.37516700 sec, 219 iters, 0.01994380 sec/iter, 644144.447986 Inertia
+cublas_simulated_annealing, data/road_spatial_network_dataset/spatial_network.data, k = 25, 4.59038580 sec, 214 iters, 0.02143400 sec/iter, 548778.34716 Inertia
+cublas_simulated_annealing, data/road_spatial_network_dataset/spatial_network.data, k = 30, 4.60998660 sec, 210 iters, 0.02191260 sec/iter, 498293.274678 Inertia
+cublas_simulated_annealing, data/road_spatial_network_dataset/spatial_network.data, k = 35, 4.75778960 sec, 206 iters, 0.02303000 sec/iter, 481774.949455 Inertia
+cublas_simulated_annealing, data/road_spatial_network_dataset/spatial_network.data, k = 40, 4.79520200 sec, 208 iters, 0.02301080 sec/iter, 432205.189151 Inertia
+cublas_simulated_annealing, data/road_spatial_network_dataset/spatial_network.data, k = 45, 5.00113900 sec, 206 iters, 0.02423360 sec/iter, 405671.277868 Inertia
+cublas_simulated_annealing, data/road_spatial_network_dataset/spatial_network.data, k = 55, 5.23593040 sec, 206 iters, 0.02539240 sec/iter, 357860.157039 Inertia
+cublas_simulated_annealing, data/nu_minebench_dataset/kmeans/edge.data, k = 50, 0.36304020 sec, 201 iters, 0.00180620 sec/iter, 48668.5082354 Inertia
+cublas_simulated_annealing, data/nu_minebench_dataset/kmeans/edge.data, k = 100, 0.58820460 sec, 201 iters, 0.00292640 sec/iter, 49819.609683 Inertia
+cublas_simulated_annealing, data/nu_minebench_dataset/kmeans/edge.data, k = 150, 1.01002680 sec, 257 iters, 0.00393160 sec/iter, 51755.0795046 Inertia
+cublas_simulated_annealing, data/nu_minebench_dataset/kmeans/edge.data, k = 200, 1.16579680 sec, 201 iters, 0.00580000 sec/iter, 50027.1669714 Inertia
+cublas_simulated_annealing, data/nu_minebench_dataset/kmeans/edge.data, k = 250, 2.37074840 sec, 297 iters, 0.00798700 sec/iter, 54118.4779842 Inertia
+cublas_simulated_annealing, data/nu_minebench_dataset/kmeans/edge.data, k = 300, 3.10823540 sec, 335 iters, 0.00924560 sec/iter, 54946.924621 Inertia
+cublas_simulated_annealing, data/nu_minebench_dataset/kmeans/edge.data, k = 350, 1.24075620 sec, 201 iters, 0.00617300 sec/iter, 65649.300436 Inertia
+cublas_simulated_annealing, data/nu_minebench_dataset/kmeans/edge.data, k = 400, 1.51742260 sec, 201 iters, 0.00754940 sec/iter, 65649.300436 Inertia
+cublas_simulated_annealing, data/nu_minebench_dataset/kmeans/edge.data, k = 500, 1.76187280 sec, 201 iters, 0.00876560 sec/iter, 65649.300436 Inertia
+cublas_simulated_annealing, data/nu_minebench_dataset/kmeans/edge.data, k = 600, 2.11142220 sec, 201 iters, 0.01050460 sec/iter, 65649.300436 Inertia
+
+cusparse, data/road_spatial_network_dataset/spatial_network.data, k = 5, 0.78869400 sec, 84 iters, 0.00934840 sec/iter, 1573892.29071 Inertia
+cusparse, data/road_spatial_network_dataset/spatial_network.data, k = 10, 3.43952980 sec, 472 iters, 0.00728660 sec/iter, 889662.734421 Inertia
+cusparse, data/road_spatial_network_dataset/spatial_network.data, k = 15, 5.63297980 sec, 727 iters, 0.00774660 sec/iter, 636306.645717 Inertia
+cusparse, data/road_spatial_network_dataset/spatial_network.data, k = 20, 7.76596920 sec, 924 iters, 0.00839900 sec/iter, 524771.990125 Inertia
+cusparse, data/road_spatial_network_dataset/spatial_network.data, k = 25, 7.21391400 sec, 747 iters, 0.00967160 sec/iter, 462717.234714 Inertia
+cusparse, data/road_spatial_network_dataset/spatial_network.data, k = 30, 12.98726240 sec, 1333 iters, 0.00975860 sec/iter, 413794.662586 Inertia
+cusparse, data/road_spatial_network_dataset/spatial_network.data, k = 35, 20.57877280 sec, 1924 iters, 0.01069000 sec/iter, 381595.660156 Inertia
+cusparse, data/road_spatial_network_dataset/spatial_network.data, k = 40, 14.73950340 sec, 1283 iters, 0.01149120 sec/iter, 360693.252857 Inertia
+cusparse, data/road_spatial_network_dataset/spatial_network.data, k = 45, 25.11578140 sec, 1997 iters, 0.01258720 sec/iter, 341947.716352 Inertia
+cusparse, data/road_spatial_network_dataset/spatial_network.data, k = 55, 27.05734280 sec, 1870 iters, 0.01447200 sec/iter, 318210.787769 Inertia
+cusparse, data/nu_minebench_dataset/kmeans/edge.data, k = 50, 0.15599680 sec, 101 iters, 0.00155880 sec/iter, 38272.6392844 Inertia
+cusparse, data/nu_minebench_dataset/kmeans/edge.data, k = 100, 0.23486940 sec, 126 iters, 0.00187820 sec/iter, 35111.866524 Inertia
+cusparse, data/nu_minebench_dataset/kmeans/edge.data, k = 150, 0.24125640 sec, 91 iters, 0.00265800 sec/iter, 33454.8056378 Inertia
+cusparse, data/nu_minebench_dataset/kmeans/edge.data, k = 200, 0.36965720 sec, 108 iters, 0.00341720 sec/iter, 32298.8149024 Inertia
+cusparse, data/nu_minebench_dataset/kmeans/edge.data, k = 250, 0.34595900 sec, 83 iters, 0.00418300 sec/iter, 31387.6838532 Inertia
+cusparse, data/nu_minebench_dataset/kmeans/edge.data, k = 300, 0.38842140 sec, 77 iters, 0.00505840 sec/iter, 30683.4660288 Inertia
+cusparse, data/nu_minebench_dataset/kmeans/edge.data, k = 350, 0.44857240 sec, 79 iters, 0.00565920 sec/iter, 30029.5667878 Inertia
+cusparse, data/nu_minebench_dataset/kmeans/edge.data, k = 400, 0.48942600 sec, 73 iters, 0.00680140 sec/iter, 29480.8261214 Inertia
+cusparse, data/nu_minebench_dataset/kmeans/edge.data, k = 500, 0.47432760 sec, 54 iters, 0.00869600 sec/iter, 28571.0814454 Inertia
+cusparse, data/nu_minebench_dataset/kmeans/edge.data, k = 600, 0.61851620 sec, 61 iters, 0.01006560 sec/iter, 27780.0813578 Inertia
+
