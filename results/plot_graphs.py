@@ -55,7 +55,7 @@ def plot_one(output_name, dataset, files, x_labels):
 	ax.set_yscale('log')
 
 
-	ax.legend((rects1[0], rects2[0], rects3[0]), ('serial', 'cuBlas', 'cuSparse'))
+	ax.legend((rects1[0], rects2[0], rects3[0]), ('serial', 'cuBlas', 'cuSparse'), loc=2)
 	ax.grid(True)
 	plt.savefig(output_name)	
 
@@ -63,13 +63,18 @@ def plot_one(output_name, dataset, files, x_labels):
 
 output_name = "road_dataset.png"
 dataset = 'data/road_spatial_network_dataset/spatial_network.data'
-files = ["titan_x_final.txt"] * 2 + ["scikit_final.out"]
+files = ["titan_x_final.txt"] * 2 + ["konka_scikit_results.out"]
 x_labels = map(str, range(5,46,5) + [55])
 plot_one(output_name, dataset, files, x_labels)
 
 output_name = "nu_minebench.png"
 dataset = 'data/nu_minebench_dataset/kmeans/edge.data'
-files = ["titan_x_final.txt"] * 2 + ["scikit_final.out"]
+files = ["titan_x_final.txt"] * 2 + ["konka_scikit_results.out"]
 x_labels = map(str, range(50,401,50) + [500, 600])
 plot_one(output_name, dataset, files, x_labels)
 
+output_name = "daily_sports.png"
+dataset = 'data/daily_sports_activities/data.data'
+files = ["results_daily.out"] * 2 + ["scikit_final.out"]
+x_labels = map(str, [5,8,10,13,15,18,20,25,30,35])
+plot_one(output_name, dataset, files, x_labels)
