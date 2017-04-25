@@ -16,7 +16,7 @@ def parse_results(condition, filename):
 	result = map(lambda x: float(x.split(",")[-2].split()[0]), kept_lines)
 	return result
 
-def plot_one(output_name, dataset, files, x_labels):
+def plot_one(output_name, dataset, files, x_labels, title):
 	cond = lambda x: x.startswith('cusparse, ' + dataset + ',')
 	cusparse_times = parse_results(cond, files[0])
 	N = len(cusparse_times)
@@ -28,8 +28,7 @@ def plot_one(output_name, dataset, files, x_labels):
 	cond = lambda x: x.startswith('scikit_kmeans, ' + dataset + ',')
 	serial_times = parse_results(cond, files[2])
 
-
-	# 
+	
 
 	max_value = max(max(serial_times), max(cublas_times), max(cusparse_times))
 
@@ -46,8 +45,8 @@ def plot_one(output_name, dataset, files, x_labels):
 	rects3 = ax.bar(ind + 2*(width + gap), cusparse_times, width, color='m')
 
 	# add some text for labels, title and axes ticks
-	ax.set_ylabel('Time (seconds)')
-	ax.set_title('Time of execution for dataset x')
+	ax.set_ylabel('Time/Iteration (seconds/iter)')
+	ax.set_title(title + " dataset")
 	ax.set_xticks(ind + width / 2)
 	ax.set_xticklabels(x_labels)
 	ax.set_xlabel('#K - Number of clusters')
@@ -61,20 +60,22 @@ def plot_one(output_name, dataset, files, x_labels):
 
 ## TODO: Show inertia somewhere
 
+title = "Spatial Network"
 output_name = "road_dataset.png"
 dataset = 'data/road_spatial_network_dataset/spatial_network.data'
 files = ["titan_x_final.txt"] * 2 + ["konka_scikit_results.out"]
 x_labels = map(str, range(5,46,5) + [55])
-plot_one(output_name, dataset, files, x_labels)
+plot_one(output_name, dataset, files, x_labels, title)
 
+title = "Nu - Minebench"
 output_name = "nu_minebench.png"
 dataset = 'data/nu_minebench_dataset/kmeans/edge.data'
 files = ["titan_x_final.txt"] * 2 + ["konka_scikit_results.out"]
 x_labels = map(str, range(50,401,50) + [500, 600])
-plot_one(output_name, dataset, files, x_labels)
+plot_one(output_name, dataset, files, x_labels, title)
 
 output_name = "daily_sports.png"
 dataset = 'data/daily_sports_activities/data.data'
 files = ["results_daily.out"] * 2 + ["scikit_final.out"]
 x_labels = map(str, [5,8,10,13,15,18,20,25,30,35])
-plot_one(output_name, dataset, files, x_labels)
+plot_one(output_name, dataset, files, x_labels, title)
